@@ -6,6 +6,7 @@ services:
       target: deps
       dockerfile: Dockerfile
     command: npm run dev
+    container_name: readme-pwa
     ports:
       - "3007:3000"
     volumes:
@@ -24,8 +25,16 @@ services:
 
   # Production service
   prod:
-    image: atemnbobs/readme-pwa:v0.0.1
+    build:
+      context: .
+      target: runner
+      dockerfile: Dockerfile
+      args:
+      - NEXT_PUBLIC_API_URL=https://tts.cloud.atemkeng.de/
+    container_name: readme-pwa
     platform: linux/amd64
+    image: atemnbobs/readme-pwa:v0.0.1
+
     ports:
       - "3007:3000"
     environment:
