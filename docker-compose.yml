@@ -1,25 +1,46 @@
 version: '3.8'
 
 services:
-  app:
+  # Development service
+  dev:
     build:
       context: .
+      target: deps
       dockerfile: Dockerfile
-      target: builder # Use the builder stage for development
+    command: npm run dev
     ports:
-      - "3005:3000"
+      - "3000:3000"
     volumes:
       - .:/app
       - /app/node_modules
       - /app/.next
     environment:
       - NODE_ENV=development
-      - TTS_API_URL=http://45.94.111.107:6080/v1/audio/speech
-      - WATCHPACK_POLLING=true
+      - NEXT_PUBLIC_API_URL=http://localhost:3000
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 5s
+
+  # Production service
+  prod:
+    build:
+      context: .
+      target: runner
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=https://your-production-url.com
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://your-production-url.com
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
     restart: unless-stopped
-    command: npm run dev
