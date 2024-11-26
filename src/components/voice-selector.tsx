@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { useSettings, voices, countryFlags } from '@/lib/store/settings'
+import { useSettings, voices, countryFlags, VoiceLanguage } from '@/lib/store/settings'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
@@ -118,7 +118,11 @@ export function VoiceSelector() {
       </div>
 
       <div className="w-full">
-        <Tabs defaultValue={activeTab} value={activeTab} onValueChange={setActiveTab}>
+        <Tabs 
+          defaultValue={activeTab} 
+          value={activeTab as string} 
+          onValueChange={(value) => setActiveTab(value as "url" | "text")}
+        >
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="text">Text</TabsTrigger>
             <TabsTrigger value="url">URL</TabsTrigger>

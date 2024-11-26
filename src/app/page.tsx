@@ -129,7 +129,11 @@ export default function Home() {
       <MobileNav />
       <MiniPlayer />
       
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs 
+        value={activeTab as string} 
+        onValueChange={(value) => setActiveTab(value as "url" | "text")} 
+        className="w-full"
+      >
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="url">URL</TabsTrigger>
           <TabsTrigger value="text">Text</TabsTrigger>
