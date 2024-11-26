@@ -4,9 +4,9 @@ import { segmentText } from '../utils/text-segmentation'
 const TTS_API_URL = '/api/tts'
 
 export class TTSError extends Error {
-  constructor(message: string, public statusCode?: number) {
-    super(message);
-    this.name = 'TTSError';
+  constructor(message: string) {
+    super(message)
+    this.name = 'TTSError'
   }
 }
 
@@ -17,48 +17,55 @@ interface TTSSegment {
   audio?: Blob;
 }
 
-export async function convertTextToSpeech(text: string, voice: VoiceId): Promise<TTSSegment[]> {
-  const segments = segmentText(text);
-  const audioSegments: TTSSegment[] = [];
+export async function convertTextToSpeech(text: string, voice: VoiceId, signal?: AbortSignal): Promise<TTSSegment[]> {
+  try {
+    const segments = segmentText(text);
+    const audioSegments: TTSSegment[] = [];
 
-  for (const segment of segments) {
-    try {
-      const response = await fetch(TTS_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text: segment.text,
-          voice,
-        }),
-      });
+    for (const segment of segments) {
+      try {
+        const response = await fetch(TTS_API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text: segment.text,
+            voice,
+          }),
+          signal, // Pass the AbortSignal to fetch
+        });
 
-      if (!response.ok) {
-        let errorMessage = 'Failed to convert text to speech';
-        try {
-          const error = await response.json();
-          errorMessage = error.message || errorMessage;
-        } catch {
-          // Use default error message if parsing fails
+        if (!response.ok) {
+          throw new TTSError(`Failed to convert text: ${response.statusText}`);
         }
-        throw new TTSError(errorMessage, response.status);
-      }
 
-      const blob = await response.blob();
-      audioSegments.push({
-        ...segment,
-        audio: blob
-      });
-    } catch (error) {
-      if (error instanceof TTSError) {
-        throw error;
+        const blob = await response.blob();
+        audioSegments.push({
+          ...segment,
+          audio: blob
+        });
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.name === 'AbortError') {
+            throw new TTSError('Conversion cancelled');
+          }
+          throw new TTSError(error.message);
+        }
+        throw new TTSError('Failed to convert text to speech');
       }
-      throw new TTSError('Failed to convert text to speech');
     }
-  }
 
-  return audioSegments;
+    return audioSegments;
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        throw new TTSError('Conversion cancelled');
+      }
+      throw new TTSError(error.message);
+    }
+    throw new TTSError('Failed to convert text to speech');
+  }
 }
 
 export function createAudioFromBlob(blob: Blob): HTMLAudioElement {

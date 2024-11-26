@@ -4,18 +4,32 @@ import React from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useAudioQueue } from '@/lib/store/audio-queue'
-import { PlayIcon, PauseIcon, SkipBackIcon, SkipForwardIcon, XIcon } from 'lucide-react'
+import { Loader2, Play, Pause, SkipBack, SkipForward, X, Minus } from 'lucide-react'
 import { toast } from 'sonner'
-import { ProgressBar } from './progress-bar'
+import { cn } from '@/lib/utils'
 
 export function MiniPlayer() {
-  const { queue, currentIndex, isPlaying, play, pause, next, previous, remove, clear } = useAudioQueue()
+  const { 
+    queue, 
+    currentIndex, 
+    isPlaying, 
+    play, 
+    pause, 
+    next, 
+    previous, 
+    remove, 
+    clear, 
+    isConverting,
+    cancelConversion 
+  } = useAudioQueue()
 
   const currentItem = currentIndex !== null ? queue[currentIndex] : null
   const hasItems = queue.length > 0
 
-  // Don't show the player if there are no items
-  if (!hasItems) return null
+  // Hide player if no items and not converting
+  if (!hasItems && !isConverting) {
+    return null
+  }
 
   const handlePlay = async () => {
     try {
@@ -63,93 +77,82 @@ export function MiniPlayer() {
   return (
     <Card className="w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="space-y-4 p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">
-              {currentItem?.segments[currentItem.currentSegment]?.text || 'No track selected'}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Part {(currentItem?.currentSegment ?? 0) + 1} of {currentItem?.totalSegments ?? 0}
-              {queue.length > 1 && ` • ${queue.length} items in queue`}
-            </p>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="ml-2"
-            onClick={handleClearQueue}
-          >
-            <XIcon className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {/* Progress bar */}
-        <ProgressBar onSeek={async (segmentIndex) => {
-          if (currentItem) {
-            try {
-              // Update current segment and play from there
-              await play(currentItem.id, segmentIndex)
-            } catch (error) {
-              console.error('Seek error:', error)
-              toast.error('Failed to seek to position')
-            }
-          }
-        }} />
-
-        <div className="flex items-center justify-center space-x-2">
-          {/* Previous button with segment info */}
-          <div className="flex flex-col items-center">
-            <span className="text-xs text-muted-foreground mb-1">
-              {currentItem && currentItem.currentSegment > 0
-                ? `Part ${currentItem.currentSegment}`
-                : ''}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handlePrevious}
-              disabled={!currentItem || currentItem.currentSegment === 0}
-            >
-              <SkipBackIcon className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <Button
-            variant="default"
-            size="icon"
-            onClick={handlePlay}
-            disabled={!currentItem}
-          >
-            {isPlaying ? (
-              <PauseIcon className="h-4 w-4" />
+            {isConverting ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <p className="text-sm">Converting text to speech...</p>
+              </div>
             ) : (
-              <PlayIcon className="h-4 w-4" />
+              <>
+                <p className="text-sm font-medium truncate">
+                  {currentItem?.segments[currentItem.currentSegment]?.text || 'No audio in queue'}
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={handlePrevious}
+                    disabled={!currentItem}
+                  >
+                    <SkipBack className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "h-8 w-8",
+                      isPlaying && "text-blue-600 dark:text-blue-400"
+                    )}
+                    onClick={handlePlay}
+                    disabled={!currentItem}
+                  >
+                    {isPlaying ? (
+                      <Pause className="h-4 w-4" />
+                    ) : (
+                      <Play className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={handleNext}
+                    disabled={!currentItem}
+                  >
+                    <SkipForward className="h-4 w-4" />
+                  </Button>
+                </div>
+              </>
             )}
-          </Button>
-
-          {/* Next button with segment info */}
-          <div className="flex flex-col items-center">
-            <span className="text-xs text-muted-foreground mb-1">
-              {currentItem && currentItem.currentSegment < currentItem.totalSegments - 1
-                ? `Part ${currentItem.currentSegment + 2}`
-                : ''}
-            </span>
+          </div>
+          <div className="flex flex-col gap-1">
+            {isConverting ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 hover:bg-red-100 hover:text-red-600"
+                onClick={() => {
+                  cancelConversion()
+                  toast.success('Conversion cancelled')
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            ) : null}
             <Button
               variant="ghost"
               size="icon"
-              onClick={handleNext}
-              disabled={!currentItem || currentItem.currentSegment === currentItem.totalSegments - 1}
+              className="h-6 w-6 hover:bg-gray-100"
+              onClick={handleClearQueue}
+              disabled={!hasItems}
             >
-              <SkipForwardIcon className="h-4 w-4" />
+              <Minus className="h-4 w-4" />
             </Button>
           </div>
         </div>
-
-        {currentItem?.error && (
-          <p className="text-xs text-destructive text-center">
-            {currentItem.error}
-          </p>
-        )}
       </div>
     </Card>
   )

@@ -1,9 +1,10 @@
 'use client'
 
 import * as React from 'react'
-import { Moon, Sun, Monitor } from 'lucide-react'
+import { Moon, Sun } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
+import { ThemeIcon } from './icons/theme-icon'
 
 export function ThemeToggle() {
   const { setTheme, theme } = useTheme()
@@ -21,7 +22,7 @@ export function ThemeToggle() {
         size="icon"
         className="h-9 w-9"
       >
-        <Monitor className="h-5 w-5" />
+        <ThemeIcon className="h-5 w-5" />
       </Button>
     )
   }
@@ -43,7 +44,7 @@ export function ThemeToggle() {
       case 'dark':
         return <Moon className="h-5 w-5" />
       default:
-        return <Monitor className="h-5 w-5" />
+        return <ThemeIcon className="h-5 w-5" />
     }
   }
 

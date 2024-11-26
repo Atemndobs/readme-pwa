@@ -10,11 +10,10 @@ interface ProgressBarProps {
 export function ProgressBar({ onSeek }: ProgressBarProps) {
   const { queue, currentIndex } = useAudioQueue()
   const currentItem = currentIndex !== null ? queue[currentIndex] : null
+  const hasItems = queue.length > 0
 
-  if (!currentItem) return null
-
-  const totalSegments = currentItem.totalSegments
-  const currentSegment = currentItem.currentSegment
+  const totalSegments = currentItem?.totalSegments ?? 1
+  const currentSegment = currentItem?.currentSegment ?? 0
 
   const handleSeek = (value: number[]) => {
     onSeek(Math.floor(value[0]))
@@ -35,6 +34,7 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
           value={[currentSegment]}
           onValueChange={handleSeek}
           className="w-full"
+          disabled={!hasItems}
         />
         
         {/* Segment markers */}
@@ -43,15 +43,14 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
             <div
               key={index}
               onClick={() => handleMarkerClick(index)}
-              className={`absolute -translate-x-1/2 -translate-y-3 w-2 h-2 rounded-full cursor-pointer pointer-events-auto transition-colors ${
-                index === currentSegment ? 'bg-primary' : 'bg-muted hover:bg-primary/50'
+              className={`absolute -translate-x-1/2 -translate-y-3 w-2 h-2 rounded-full ${
+                !hasItems ? 'bg-muted cursor-not-allowed' :
+                index === currentSegment ? 'bg-primary cursor-pointer pointer-events-auto' : 
+                'bg-muted hover:bg-primary/50 cursor-pointer pointer-events-auto'
               }`}
               style={{
                 left: `${(index / (totalSegments - 1)) * 100}%`,
               }}
-              role="button"
-              tabIndex={0}
-              aria-label={`Go to segment ${index + 1}`}
             />
           ))}
         </div>
@@ -60,7 +59,7 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
       {/* Progress info */}
       <div className="flex justify-between text-xs text-muted-foreground">
         <span>Part {currentSegment + 1} of {totalSegments}</span>
-        <span>{currentItem.segments[currentSegment]?.type || 'Text'}</span>
+        <span>{currentItem?.segments[currentSegment]?.type || 'Text'}</span>
       </div>
     </div>
   )

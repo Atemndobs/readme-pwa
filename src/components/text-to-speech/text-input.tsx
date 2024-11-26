@@ -12,6 +12,7 @@ import { TTSError } from '@/lib/api/tts';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { VoiceSelector } from '../settings/voice-selector';
+import { MiniPlayer } from '../audio-player/mini-player';
 
 export function TextInput() {
   const [text, setText] = useState('');
@@ -61,65 +62,68 @@ export function TextInput() {
         <CardTitle>Convert Text to Speech</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="mb-6">
-          <VoiceSelector />
+        <div className="space-y-6">
+          <div>
+            <VoiceSelector />
+          </div>
+          <MiniPlayer />
+          <Tabs defaultValue="text" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="text">Text Input</TabsTrigger>
+              <TabsTrigger value="url">URL Input</TabsTrigger>
+            </TabsList>
+            <TabsContent value="text">
+              <div className="space-y-4">
+                <Textarea
+                  placeholder="Enter text to convert..."
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  className="min-h-[200px]"
+                  disabled={loading}
+                />
+                <Button 
+                  onClick={handleTextConvert} 
+                  disabled={loading || !text.trim()}
+                  className="w-full"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Converting...
+                    </>
+                  ) : (
+                    'Convert to Speech'
+                  )}
+                </Button>
+              </div>
+            </TabsContent>
+            <TabsContent value="url">
+              <div className="space-y-4">
+                <Input
+                  type="url"
+                  placeholder="Enter URL to fetch content..."
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  disabled={loading}
+                />
+                <Button 
+                  onClick={handleUrlFetch}
+                  disabled={loading || !url.trim()}
+                  className="w-full"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Fetching...
+                    </>
+                  ) : (
+                    'Fetch and Convert'
+                  )}
+                </Button>
+              </div>
+            </TabsContent>
+          </Tabs>
         </div>
-        <Tabs defaultValue="text" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="text">Text Input</TabsTrigger>
-            <TabsTrigger value="url">URL Input</TabsTrigger>
-          </TabsList>
-          <TabsContent value="text">
-            <div className="space-y-4">
-              <Textarea
-                placeholder="Enter text to convert..."
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                className="min-h-[200px]"
-                disabled={loading}
-              />
-              <Button 
-                onClick={handleTextConvert} 
-                disabled={loading || !text.trim()}
-                className="w-full"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Converting...
-                  </>
-                ) : (
-                  'Convert to Speech'
-                )}
-              </Button>
-            </div>
-          </TabsContent>
-          <TabsContent value="url">
-            <div className="space-y-4">
-              <Input
-                type="url"
-                placeholder="Enter URL to fetch content..."
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                disabled={loading}
-              />
-              <Button 
-                onClick={handleUrlFetch}
-                disabled={loading || !url.trim()}
-                className="w-full"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Fetching...
-                  </>
-                ) : (
-                  'Fetch and Convert'
-                )}
-              </Button>
-            </div>
-          </TabsContent>
-        </Tabs>
       </CardContent>
     </Card>
   );

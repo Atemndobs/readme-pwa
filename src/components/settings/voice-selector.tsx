@@ -2,6 +2,7 @@
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useSettings, voices, type VoiceLanguage } from '@/lib/store/settings';
+import { Button } from '../ui/button';
 
 export function VoiceSelector() {
   const { language, voice, setLanguage, setVoice } = useSettings();
@@ -11,6 +12,16 @@ export function VoiceSelector() {
     // Set the first voice of the new language as default
     setVoice(voices[newLanguage][0].id);
   };
+
+  const handleVoiceClick = () => {
+    const currentVoices = voices[language];
+    const currentIndex = currentVoices.findIndex(v => v.id === voice);
+    const nextIndex = (currentIndex + 1) % currentVoices.length;
+    setVoice(currentVoices[nextIndex].id);
+  };
+
+  // Get current voice name
+  const currentVoice = voices[language].find(v => v.id === voice)?.name || 'Select voice';
 
   return (
     <div className="flex gap-4">
@@ -27,18 +38,13 @@ export function VoiceSelector() {
         </SelectContent>
       </Select>
 
-      <Select value={voice} onValueChange={setVoice}>
-        <SelectTrigger className="w-[180px]">
-          <SelectValue placeholder="Select voice" />
-        </SelectTrigger>
-        <SelectContent>
-          {voices[language].map((v) => (
-            <SelectItem key={v.id} value={v.id}>
-              {v.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <Button
+        variant="outline"
+        className="w-[180px] justify-start font-normal"
+        onClick={handleVoiceClick}
+      >
+        {currentVoice}
+      </Button>
     </div>
   );
 }

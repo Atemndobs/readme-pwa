@@ -76,6 +76,7 @@ export function segmentText(html: string): TextSegment[] {
   
   const $ = cheerio.load(content);
   const segments: TextSegment[] = [];
+  const seenTexts = new Set<string>(); // Track unique text segments
 
   // Process block elements
   $(BLOCK_ELEMENTS.join(', ')).each((_, element) => {
@@ -88,29 +89,33 @@ export function segmentText(html: string): TextSegment[] {
 
     // Split long text into sentences while preserving type
     const textSegments = splitIntoSentences(text);
-    textSegments.forEach((segmentText, index) => {
-      segments.push({
-        text: segmentText,
-        type,
-        level,
-        pauseDuration: PAUSE_DURATIONS[type],
-      });
+    textSegments.forEach((segmentText) => {
+      // Only add if this exact text hasn't been seen before
+      if (!seenTexts.has(segmentText)) {
+        seenTexts.add(segmentText);
+        segments.push({
+          text: segmentText,
+          type,
+          level,
+          pauseDuration: PAUSE_DURATIONS[type],
+        });
+      }
     });
   });
 
-  // If no segments were created (plain text), split the entire body
-  if (segments.length === 0) {
-    const bodyText = $('body').text().trim();
-    if (bodyText) {
-      const textSegments = splitIntoSentences(bodyText);
-      textSegments.forEach(segmentText => {
+  // Only process body text if no block elements were found and the text isn't wrapped
+  if (segments.length === 0 && !isHTML) {
+    const textSegments = splitIntoSentences(html.trim());
+    textSegments.forEach((segmentText) => {
+      if (!seenTexts.has(segmentText)) {
+        seenTexts.add(segmentText);
         segments.push({
           text: segmentText,
           type: 'text',
           pauseDuration: PAUSE_DURATIONS.text,
         });
-      });
-    }
+      }
+    });
   }
 
   return segments;
