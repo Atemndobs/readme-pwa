@@ -1,5 +1,5 @@
-import { split, Sentence } from 'sentence-splitter';
 import * as cheerio from 'cheerio';
+import { split } from 'sentence-splitter';
 
 export const MAX_SEGMENT_LENGTH = 500; // Maximum characters per segment
 const BLOCK_ELEMENTS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'div'];
@@ -49,7 +49,9 @@ function splitIntoSentences(text: string): string[] {
 }
 
 function getElementType(element: cheerio.Element): TextSegment['type'] {
-  const tagName = element.tagName.toLowerCase();
+  const name = (element as any).name;
+  if (!name) return 'text';
+  const tagName = name.toLowerCase();
   if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tagName)) return 'heading';
   if (tagName === 'li') return 'list';
   if (tagName === 'blockquote') return 'quote';
@@ -58,7 +60,9 @@ function getElementType(element: cheerio.Element): TextSegment['type'] {
 }
 
 function getHeadingLevel(element: cheerio.Element): number | undefined {
-  const tagName = element.tagName.toLowerCase();
+  const name = (element as any).name;
+  if (!name) return undefined;
+  const tagName = name.toLowerCase();
   if (tagName.startsWith('h') && tagName.length === 2) {
     return parseInt(tagName[1]);
   }

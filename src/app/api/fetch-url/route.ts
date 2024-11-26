@@ -73,18 +73,21 @@ export async function POST(request: NextRequest) {
     
     // Clean up the content
     $('*').each((_, elem) => {
+      const $elem = $(elem);
       // Remove empty elements except line breaks
-      if ($(elem).text().trim() === '' && !['br', 'hr'].includes(elem.tagName)) {
-        $(elem).remove()
+      if ($elem.text().trim() === '' && !['BR', 'HR'].includes($elem.prop('tagName') || '')) {
+        $elem.remove();
+        return;
       }
+      
       // Remove all attributes except specific ones we want to keep
-      const attrs = elem.attributes
-      for (let i = attrs.length - 1; i >= 0; i--) {
-        const attrName = attrs[i].name
-        if (!['class'].includes(attrName)) {
-          $(elem).removeAttr(attrName)
+      const attributesToKeep = ['class'];
+      const attributes = $elem.attr() || {};
+      Object.keys(attributes).forEach(attr => {
+        if (!attributesToKeep.includes(attr)) {
+          $elem.removeAttr(attr);
         }
-      }
+      });
     })
 
     // Add styling classes

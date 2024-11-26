@@ -3,7 +3,7 @@ const nextConfig = {
   output: 'standalone',
   experimental: {
     serverActions: {
-      allowedOrigins: ['localhost:3000'],
+      allowedOrigins: ['localhost:3000', 'localhost:3007'],
     },
   },
   headers: async () => {

@@ -8,6 +8,7 @@ services:
       target: deps
       dockerfile: Dockerfile
     command: npm run dev
+    container_name: readme-pwa-dev
     ports:
       - "3000:3000"
     volumes:
@@ -31,12 +32,15 @@ services:
       target: runner
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_API_URL=https://your-production-url.com
+        - NEXT_PUBLIC_API_URL=https://tts.cloud.atemkeng.de/
+    container_name: readme-pwa
+    platform: linux/amd64
+    image: atemnbobs/readme-pwa:v0.0.1
     ports:
-      - "3000:3000"
+      - "3007:3000"
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=https://your-production-url.com
+      - NEXT_PUBLIC_API_URL=https://tts.cloud.atemkeng.de
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
       interval: 30s
