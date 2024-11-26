@@ -77,11 +77,20 @@ export const useAudioQueue = create<AudioQueueStore>((set, get) => ({
         const updatedQueue = [...state.queue]
         const item = updatedQueue[itemIndex]
         
-        item.segments = item.segments.map((segment, index) => ({
-          ...segment,
-          audio: new Audio(URL.createObjectURL(audioSegments[index].audio)),
-          status: 'ready'
-        }))
+        item.segments = item.segments.map((segment, index) => {
+          const audioBlob = audioSegments[index]?.audio;
+          if (!audioBlob) {
+            return {
+              ...segment,
+              status: 'error' as const,
+            };
+          }
+          return {
+            ...segment,
+            audio: new Audio(URL.createObjectURL(audioBlob)),
+            status: 'ready' as const,
+          };
+        });
         item.status = 'ready'
 
         return { queue: updatedQueue }

@@ -69,7 +69,7 @@ export function MiniPlayer() {
               {currentItem?.segments[currentItem.currentSegment]?.text || 'No track selected'}
             </p>
             <p className="text-xs text-muted-foreground">
-              Part {currentItem?.currentSegment + 1} of {currentItem?.totalSegments || 0}
+              Part {(currentItem?.currentSegment ?? 0) + 1} of {currentItem?.totalSegments ?? 0}
               {queue.length > 1 && ` • ${queue.length} items in queue`}
             </p>
           </div>

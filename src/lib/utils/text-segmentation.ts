@@ -1,5 +1,5 @@
-import { split, Sentence } from 'sentence-splitter';
 import * as cheerio from 'cheerio';
+import { split } from 'sentence-splitter';
 
 export const MAX_SEGMENT_LENGTH = 500; // Maximum characters per segment
 const BLOCK_ELEMENTS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'div'];
