@@ -63,7 +63,17 @@ export default function RootLayout({
         >
           <div className="min-h-screen bg-background text-foreground">
             {children}
-            <Toaster richColors position="top-center" />
+            <Toaster 
+              richColors 
+              position="bottom-left" 
+              toastOptions={{
+                style: {
+                  background: 'rgba(255, 255, 255, 0.9)',
+                  backdropFilter: 'blur(8px)',
+                  border: '1px solid rgba(0, 0, 0, 0.1)',
+                },
+              }}
+            />
           </div>
         </ThemeProvider>
       </body>
