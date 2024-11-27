@@ -4,12 +4,15 @@ import { TTSError, convertTextToSpeech } from '../api/tts'
 import { VoiceId } from './settings'
 import { segmentText, TextSegment, PAUSE_DURATIONS } from '../utils/text-segmentation'
 
+type AudioSegmentStatus = 'pending' | 'loading' | 'ready' | 'playing' | 'paused' | 'error' | 'cancelled'
+type QueueItemStatus = 'pending' | 'loading' | 'ready' | 'playing' | 'paused' | 'error' | 'partial' | 'converting'
+
 interface AudioSegment extends TextSegment {
   id: string
-  audioUrl?: string
-  audio?: HTMLAudioElement
+  audioUrl: string | null
+  audio: HTMLAudioElement | null
   audioData?: string  // Base64 encoded audio data
-  status: 'pending' | 'loading' | 'ready' | 'playing' | 'paused' | 'error' | 'cancelled'
+  status: AudioSegmentStatus
   error?: string
 }
 
@@ -18,8 +21,8 @@ interface QueueItem {
   text: string
   voice: VoiceId
   segments: AudioSegment[]
-  status: 'pending' | 'loading' | 'ready' | 'playing' | 'paused' | 'error' | 'partial' | 'converting'
-  error?: string
+  status: QueueItemStatus
+  error: string | null
   currentSegment: number
   totalSegments: number
 }
@@ -40,7 +43,7 @@ interface AudioQueueStore {
   pause: () => void
   next: () => Promise<void>
   previous: () => Promise<void>
-  setStatus: (id: string, status: QueueItem['status'], error?: string) => void
+  setStatus: (id: string, status: QueueItemStatus, error?: string) => void
   cancelConversion: () => void
   setVolume: (volume: number) => void
   toggleMute: () => void
@@ -74,6 +77,8 @@ export const useAudioQueue = create<AudioQueueStore>()(
             ...state.queue,
             {
               id,
+              text,
+              voice,
               segments: textSegments.map((segment, index) => ({
                 ...segment,
                 id: `${id}-${index}`,
@@ -156,7 +161,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
               }
 
             } catch (error) {
-              if (error.name === 'AbortError') {
+              if ((error as { name: string }).name === 'AbortError') {
                 throw error // Re-throw abort errors
               }
               
@@ -172,7 +177,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
                             ? {
                                 ...seg,
                                 status: 'error',
-                                error: error.message
+                                error: (error as Error).message || 'Unknown error'
                               }
                             : seg
                         )
@@ -183,7 +188,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
             }
           }
         } catch (error) {
-          if (error.name === 'AbortError') {
+          if ((error as { name: string }).name === 'AbortError') {
             // Conversion was cancelled
             set(state => ({
               isConverting: false,
@@ -199,7 +204,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
             conversionAbortController: null,
             queue: state.queue.map(item =>
               item.id === id
-                ? { ...item, status: 'error', error: error.message }
+                ? { ...item, status: 'error' as const, error: (error as Error).message || 'Unknown error' }
                 : item
             )
           }))
@@ -407,7 +412,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
             isPlaying: false,
             queue: state.queue.map((item, index) => 
               index === itemIndex 
-                ? { ...item, status: 'error', error: error.message }
+                ? { ...item, status: 'error' as const, error: (error as Error).message || 'Unknown error' }
                 : item
             )
           }))
@@ -438,7 +443,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
         })
       },
 
-      setStatus: (id: string, status: QueueItem['status'], error?: string) => {
+      setStatus: (id: string, status: QueueItemStatus, error?: string) => {
         set(state => ({
           queue: state.queue.map(item =>
             item.id === id
@@ -459,12 +464,12 @@ export const useAudioQueue = create<AudioQueueStore>()(
               if (item.status === 'pending' || item.status === 'converting') {
                 return {
                   ...item,
-                  status: 'partial', // New status for partially converted items
-                  segments: item.segments.map(segment => ({
-                    ...segment,
-                    status: segment.status === 'ready' ? 'ready' : 'cancelled'
+                  status: 'cancelled' as QueueItemStatus,
+                  segments: item.segments.map(seg => ({
+                    ...seg,
+                    status: (seg.status === 'ready' ? 'ready' : 'cancelled') as AudioSegmentStatus
                   }))
-                }
+                } as QueueItem
               }
               return item
             })
@@ -605,7 +610,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
               }))
 
             } catch (error) {
-              if (error.name === 'AbortError') throw error
+              if ((error as { name: string }).name === 'AbortError') throw error
               
               console.error(`Error converting segment ${i}:`, error)
               // Mark the failed segment but continue with others
@@ -618,8 +623,8 @@ export const useAudioQueue = create<AudioQueueStore>()(
                           segIndex === i
                             ? {
                                 ...seg,
-                                status: 'error',
-                                error: error.message
+                                status: 'error' as const,
+                                error: (error as Error).message || 'Unknown error'
                               }
                             : seg
                         )
@@ -630,7 +635,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
             }
           }
         } catch (error) {
-          if (error.name === 'AbortError') {
+          if ((error as { name: string }).name === 'AbortError') {
             // Handle cancellation
             set(state => ({
               isConverting: false,
@@ -639,12 +644,12 @@ export const useAudioQueue = create<AudioQueueStore>()(
                 qItem.id === id
                   ? {
                       ...qItem,
-                      status: 'partial',
+                      status: 'partial' as QueueItemStatus,
                       segments: qItem.segments.map(seg => ({
                         ...seg,
-                        status: seg.status === 'ready' ? 'ready' : 'cancelled'
+                        status: (seg.status === 'ready' ? 'ready' : 'cancelled') as AudioSegmentStatus
                       }))
-                    }
+                    } as QueueItem
                   : qItem
               )
             }))
@@ -657,7 +662,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
             conversionAbortController: null,
             queue: state.queue.map(qItem =>
               qItem.id === id
-                ? { ...qItem, status: 'error', error: error.message }
+                ? { ...qItem, status: 'error' as const, error: (error as Error).message || 'Unknown error' }
                 : qItem
             )
           }))
