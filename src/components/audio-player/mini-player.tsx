@@ -33,6 +33,7 @@ export function MiniPlayer() {
     clear, 
     isConverting,
     cancelConversion,
+    resumeConversion,
     volume,
     setVolume,
     muted,
@@ -93,7 +94,39 @@ export function MiniPlayer() {
             {isConverting ? (
               <div className="flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <p className="text-sm">Converting text to speech...</p>
+                <div>
+                  <p className="text-sm">Converting text to speech...</p>
+                  {currentItem && (
+                    <p className="text-xs text-muted-foreground">
+                      {currentItem.segments.filter(s => s.status === 'ready').length} of {currentItem.totalSegments} segments ready
+                    </p>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => cancelConversion()}
+                    className="text-xs"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : currentItem?.status === 'partial' ? (
+              <div className="flex items-center gap-2">
+                <div>
+                  <p className="text-sm">Partially converted</p>
+                  <p className="text-xs text-muted-foreground">
+                    {currentItem.segments.filter(s => s.status === 'ready').length} of {currentItem.totalSegments} segments available
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => resumeConversion(currentItem.id, currentItem.voice)}
+                    className="text-xs"
+                  >
+                    Resume Conversion
+                  </Button>
+                </div>
               </div>
             ) : (
               <>

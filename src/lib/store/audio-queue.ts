@@ -8,7 +8,8 @@ interface AudioSegment extends TextSegment {
   id: string
   audioUrl?: string
   audio?: HTMLAudioElement
-  status: 'pending' | 'loading' | 'ready' | 'playing' | 'paused' | 'error'
+  audioData?: string  // Base64 encoded audio data
+  status: 'pending' | 'loading' | 'ready' | 'playing' | 'paused' | 'error' | 'cancelled'
   error?: string
 }
 
@@ -17,7 +18,7 @@ interface QueueItem {
   text: string
   voice: VoiceId
   segments: AudioSegment[]
-  status: 'pending' | 'loading' | 'ready' | 'playing' | 'paused' | 'error'
+  status: 'pending' | 'loading' | 'ready' | 'playing' | 'paused' | 'error' | 'partial' | 'converting'
   error?: string
   currentSegment: number
   totalSegments: number
@@ -43,10 +44,12 @@ interface AudioQueueStore {
   cancelConversion: () => void
   setVolume: (volume: number) => void
   toggleMute: () => void
+  rehydrateAudio: () => void
+  resumeConversion: (id: string, voice: VoiceId) => Promise<void>
 }
 
 type PersistedState = Omit<AudioQueueStore, 
-  'currentAudio' | 'isPlaying' | 'isConverting' | 'conversionAbortController' | 'add' | 'remove' | 'clear' | 'play' | 'pause' | 'next' | 'previous' | 'setStatus' | 'cancelConversion' | 'setVolume' | 'toggleMute'
+  'currentAudio' | 'isPlaying' | 'isConverting' | 'conversionAbortController' | 'add' | 'remove' | 'clear' | 'play' | 'pause' | 'next' | 'previous' | 'setStatus' | 'cancelConversion' | 'setVolume' | 'toggleMute' | 'rehydrateAudio' | 'resumeConversion'
 >
 
 export const useAudioQueue = create<AudioQueueStore>()(
@@ -66,99 +69,148 @@ export const useAudioQueue = create<AudioQueueStore>()(
         const textSegments = segmentText(text)
         const abortController = new AbortController()
         
-        set(state => ({ 
-          isConverting: true,
-          conversionAbortController: abortController,
+        set(state => ({
           queue: [
             ...state.queue,
             {
               id,
-              text,
-              voice,
               segments: textSegments.map((segment, index) => ({
                 ...segment,
                 id: `${id}-${index}`,
                 status: 'pending',
+                audioUrl: null,
+                audio: null
               })),
-              status: 'pending',
               currentSegment: 0,
               totalSegments: textSegments.length,
-            },
+              status: 'pending',
+              error: null
+            }
           ],
+          isConverting: true,
+          conversionAbortController: abortController
         }))
 
+        let firstSegmentConverted = false
+
         try {
-          const audioSegments = await convertTextToSpeech(text, voice, abortController.signal)
-          
-          // Check if conversion was cancelled
-          if (abortController.signal.aborted) {
+          // Convert segments one by one
+          for (let i = 0; i < textSegments.length; i++) {
+            const segment = textSegments[i]
+            
+            try {
+              // Convert current segment
+              const response = await fetch('/api/tts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: segment.text, voice }),
+                signal: abortController.signal
+              })
+
+              if (!response.ok) {
+                throw new Error('Failed to convert text to speech')
+              }
+
+              const audioBlob = await response.blob()
+              // Convert blob to base64 for storage
+              const reader = new FileReader()
+              const audioData = await new Promise<string>((resolve) => {
+                reader.onloadend = () => resolve(reader.result as string)
+                reader.readAsDataURL(audioBlob)
+              })
+              
+              const audioUrl = URL.createObjectURL(audioBlob)
+              const audio = new Audio(audioUrl)
+
+              // Update segment with audio and audioData
+              set(state => ({
+                queue: state.queue.map(item =>
+                  item.id === id
+                    ? {
+                        ...item,
+                        segments: item.segments.map((seg, segIndex) =>
+                          segIndex === i
+                            ? {
+                                ...seg,
+                                status: 'ready',
+                                audioUrl,
+                                audio,
+                                audioData
+                              }
+                            : seg
+                        ),
+                        status: i === textSegments.length - 1 ? 'ready' : 'converting'
+                      }
+                    : item
+                )
+              }))
+
+              // Start playing after first segment is ready
+              if (!firstSegmentConverted) {
+                firstSegmentConverted = true
+                const state = get()
+                if (state.currentIndex === null) {
+                  // Only auto-play if nothing else is playing
+                  await get().play(id)
+                }
+              }
+
+            } catch (error) {
+              if (error.name === 'AbortError') {
+                throw error // Re-throw abort errors
+              }
+              
+              console.error(`Error converting segment ${i}:`, error)
+              // Mark the failed segment but continue with others
+              set(state => ({
+                queue: state.queue.map(item =>
+                  item.id === id
+                    ? {
+                        ...item,
+                        segments: item.segments.map((seg, segIndex) =>
+                          segIndex === i
+                            ? {
+                                ...seg,
+                                status: 'error',
+                                error: error.message
+                              }
+                            : seg
+                        )
+                      }
+                    : item
+                )
+              }))
+            }
+          }
+        } catch (error) {
+          if (error.name === 'AbortError') {
+            // Conversion was cancelled
             set(state => ({
               isConverting: false,
               conversionAbortController: null,
-              queue: state.queue.filter(item => item.id !== id)
+              queue: state.queue.filter(item => item.status !== 'pending')
             }))
             return
           }
 
-          set(state => {
-            const itemIndex = state.queue.findIndex(item => item.id === id)
-            if (itemIndex === -1) return state
-
-            const updatedQueue = [...state.queue]
-            const item = updatedQueue[itemIndex]
-            
-            item.segments = item.segments.map((segment, index) => {
-              const audioBlob = audioSegments[index]?.audio
-              if (!audioBlob) {
-                return {
-                  ...segment,
-                  status: 'error' as const,
-                }
-              }
-              const audioUrl = URL.createObjectURL(audioBlob)
-              const audio = new Audio(audioUrl)
-              return {
-                ...segment,
-                audio,
-                audioUrl,
-                status: 'ready' as const,
-              }
-            })
-            item.status = 'ready'
-
-            return { 
-              queue: updatedQueue, 
-              isConverting: false,
-              conversionAbortController: null
-            }
-          })
-
-          // Start playing if it's the only item
-          const state = get()
-          if (state.queue.length === 1) {
-            await get().play(id)
-          }
-        } catch (error) {
-          // Only update error state if conversion wasn't cancelled
-          if (!abortController.signal.aborted) {
-            set(state => {
-              const itemIndex = state.queue.findIndex(item => item.id === id)
-              if (itemIndex === -1) return state
-
-              const updatedQueue = [...state.queue]
-              const item = updatedQueue[itemIndex]
-              
-              item.status = 'error'
-              item.error = error instanceof TTSError ? error.message : 'Failed to convert text to speech'
-              
-              return { 
-                queue: updatedQueue, 
-                isConverting: false,
-                conversionAbortController: null
-              }
-            })
-          }
+          // Handle other errors
+          set(state => ({
+            isConverting: false,
+            conversionAbortController: null,
+            queue: state.queue.map(item =>
+              item.id === id
+                ? { ...item, status: 'error', error: error.message }
+                : item
+            )
+          }))
+          throw error
         }
+
+        // All segments converted successfully
+        set(state => ({
+          isConverting: false,
+          conversionAbortController: null
+        }))
       },
 
       remove: (id: string) => {
@@ -271,10 +323,13 @@ export const useAudioQueue = create<AudioQueueStore>()(
       },
 
       play: async (id?: string, segmentIndex?: number) => {
-        const { queue, currentIndex, currentAudio, volume, muted } = get()
+        console.log('Playing audio...', { id, segmentIndex })
+        const { queue, currentIndex, volume, muted } = get()
         
-        // Stop current audio if playing
+        // Stop current audio if any
+        const currentAudio = get().currentAudio
         if (currentAudio) {
+          console.log('Stopping current audio')
           currentAudio.pause()
           currentAudio.currentTime = 0
         }
@@ -284,7 +339,8 @@ export const useAudioQueue = create<AudioQueueStore>()(
         if (id) {
           itemIndex = queue.findIndex(item => item.id === id)
           if (itemIndex === -1) {
-            throw new Error('Item not found')
+            console.error('Item not found:', id)
+            return
           }
         } else if (itemIndex === null && queue.length > 0) {
           itemIndex = 0
@@ -297,13 +353,33 @@ export const useAudioQueue = create<AudioQueueStore>()(
         const item = queue[itemIndex]
         const segment = item.segments[segmentIndex ?? item.currentSegment]
         
-        if (!segment || !segment.audioUrl) {
-          throw new Error('No audio URL available')
+        if (!segment || !segment.audioData) {
+          console.error('No audio data available for segment:', segment)
+          throw new Error('No audio data available')
         }
 
         try {
-          // Create and configure new audio element
-          const audio = new Audio(segment.audioUrl)
+          console.log('Creating audio from stored data:', {
+            segmentId: segment.id,
+            hasAudioData: !!segment.audioData,
+            dataPreview: segment.audioData?.substring(0, 100) + '...'
+          })
+          
+          // Create new blob URL from stored base64 data
+          const byteString = atob(segment.audioData.split(',')[1])
+          const mimeType = segment.audioData.split(',')[0].split(':')[1].split(';')[0]
+          console.log('Audio MIME type:', mimeType)
+          
+          const ab = new ArrayBuffer(byteString.length)
+          const ia = new Uint8Array(ab)
+          for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i)
+          }
+          const blob = new Blob([ab], { type: mimeType })
+          const audioUrl = URL.createObjectURL(blob)
+          console.log('Created new blob URL:', audioUrl)
+          
+          const audio = new Audio(audioUrl)
           audio.volume = volume
           audio.muted = muted
 
@@ -373,13 +449,31 @@ export const useAudioQueue = create<AudioQueueStore>()(
       },
 
       cancelConversion: () => {
-        const { conversionAbortController, queue } = get()
+        const { conversionAbortController, queue, currentIndex } = get()
         if (conversionAbortController) {
           conversionAbortController.abort()
-          set({ 
-            isConverting: false, 
-            conversionAbortController: null,
-            queue: queue.filter(item => item.status !== 'pending')
+          
+          // Instead of removing the item, keep converted segments
+          set(state => {
+            const updatedQueue = state.queue.map(item => {
+              if (item.status === 'pending' || item.status === 'converting') {
+                return {
+                  ...item,
+                  status: 'partial', // New status for partially converted items
+                  segments: item.segments.map(segment => ({
+                    ...segment,
+                    status: segment.status === 'ready' ? 'ready' : 'cancelled'
+                  }))
+                }
+              }
+              return item
+            })
+            
+            return {
+              isConverting: false,
+              conversionAbortController: null,
+              queue: updatedQueue
+            }
           })
         }
       },
@@ -400,6 +494,186 @@ export const useAudioQueue = create<AudioQueueStore>()(
         if (currentAudio) {
           currentAudio.muted = get().muted
         }
+      },
+
+      rehydrateAudio: () => {
+        console.log('Rehydrating audio from storage...')
+        set(state => {
+          const updatedQueue = state.queue.map(item => ({
+            ...item,
+            segments: item.segments.map(segment => {
+              if (segment.audioData) {
+                console.log(`Rehydrating segment ${segment.id}:`, {
+                  hasAudioData: true,
+                  dataLength: segment.audioData.length,
+                  preview: segment.audioData.substring(0, 100) + '...'
+                })
+                
+                // Create new blob URL from stored base64 data
+                const byteString = atob(segment.audioData.split(',')[1])
+                const mimeType = segment.audioData.split(',')[0].split(':')[1].split(';')[0]
+                console.log('Audio MIME type:', mimeType)
+                
+                const ab = new ArrayBuffer(byteString.length)
+                const ia = new Uint8Array(ab)
+                for (let i = 0; i < byteString.length; i++) {
+                  ia[i] = byteString.charCodeAt(i)
+                }
+                const blob = new Blob([ab], { type: mimeType })
+                const audioUrl = URL.createObjectURL(blob)
+                console.log('Created new blob URL:', audioUrl)
+                
+                return {
+                  ...segment,
+                  audioUrl,
+                  audio: new Audio(audioUrl)
+                }
+              }
+              console.log(`Segment ${segment.id} has no audio data`)
+              return segment
+            })
+          }))
+          console.log('Rehydration complete. Queue:', updatedQueue)
+          return { queue: updatedQueue }
+        })
+      },
+
+      resumeConversion: async (id: string, voice: VoiceId) => {
+        const { queue } = get()
+        const item = queue.find(item => item.id === id)
+        if (!item) return
+
+        const abortController = new AbortController()
+        
+        set({ 
+          isConverting: true,
+          conversionAbortController: abortController
+        })
+
+        try {
+          // Convert remaining segments
+          for (let i = 0; i < item.segments.length; i++) {
+            const segment = item.segments[i]
+            
+            // Skip already converted segments
+            if (segment.status === 'ready') continue
+
+            try {
+              const response = await fetch('/api/tts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: segment.text, voice }),
+                signal: abortController.signal
+              })
+
+              if (!response.ok) {
+                throw new Error('Failed to convert text to speech')
+              }
+
+              const audioBlob = await response.blob()
+              // Convert blob to base64 for storage
+              const reader = new FileReader()
+              const audioData = await new Promise<string>((resolve) => {
+                reader.onloadend = () => resolve(reader.result as string)
+                reader.readAsDataURL(audioBlob)
+              })
+              
+              const audioUrl = URL.createObjectURL(audioBlob)
+              const audio = new Audio(audioUrl)
+
+              // Update segment with audio and audioData
+              set(state => ({
+                queue: state.queue.map(qItem =>
+                  qItem.id === id
+                    ? {
+                        ...qItem,
+                        segments: qItem.segments.map((seg, segIndex) =>
+                          segIndex === i
+                            ? {
+                                ...seg,
+                                status: 'ready',
+                                audioUrl,
+                                audio,
+                                audioData
+                              }
+                            : seg
+                        ),
+                        status: i === item.segments.length - 1 ? 'ready' : 'converting'
+                      }
+                    : qItem
+                )
+              }))
+
+            } catch (error) {
+              if (error.name === 'AbortError') throw error
+              
+              console.error(`Error converting segment ${i}:`, error)
+              // Mark the failed segment but continue with others
+              set(state => ({
+                queue: state.queue.map(qItem =>
+                  qItem.id === id
+                    ? {
+                        ...qItem,
+                        segments: qItem.segments.map((seg, segIndex) =>
+                          segIndex === i
+                            ? {
+                                ...seg,
+                                status: 'error',
+                                error: error.message
+                              }
+                            : seg
+                        )
+                      }
+                    : qItem
+                )
+              }))
+            }
+          }
+        } catch (error) {
+          if (error.name === 'AbortError') {
+            // Handle cancellation
+            set(state => ({
+              isConverting: false,
+              conversionAbortController: null,
+              queue: state.queue.map(qItem =>
+                qItem.id === id
+                  ? {
+                      ...qItem,
+                      status: 'partial',
+                      segments: qItem.segments.map(seg => ({
+                        ...seg,
+                        status: seg.status === 'ready' ? 'ready' : 'cancelled'
+                      }))
+                    }
+                  : qItem
+              )
+            }))
+            return
+          }
+
+          // Handle other errors
+          set(state => ({
+            isConverting: false,
+            conversionAbortController: null,
+            queue: state.queue.map(qItem =>
+              qItem.id === id
+                ? { ...qItem, status: 'error', error: error.message }
+                : qItem
+            )
+          }))
+          throw error
+        }
+
+        // All remaining segments converted successfully
+        set(state => ({
+          isConverting: false,
+          conversionAbortController: null,
+          queue: state.queue.map(qItem =>
+            qItem.id === id
+              ? { ...qItem, status: 'ready' }
+              : qItem
+          )
+        }))
       }
     }),
     {
@@ -410,7 +684,9 @@ export const useAudioQueue = create<AudioQueueStore>()(
           ...item,
           segments: item.segments.map(segment => ({
             ...segment,
-            audio: undefined // Don't persist Audio objects
+            audio: undefined, // Don't persist Audio objects
+            audioUrl: undefined, // Don't persist URLs
+            // Keep audioData for rehydration
           }))
         })),
         currentIndex: state.currentIndex,
@@ -418,15 +694,9 @@ export const useAudioQueue = create<AudioQueueStore>()(
         muted: state.muted
       }),
       onRehydrateStorage: () => (state) => {
-        // Reconstruct Audio objects from URLs after rehydration
-        if (state?.queue) {
-          state.queue.forEach(item => {
-            item.segments.forEach(segment => {
-              if (segment.audioUrl) {
-                segment.audio = new Audio(segment.audioUrl);
-              }
-            });
-          });
+        if (state) {
+          // Recreate Audio objects from stored URLs
+          state.rehydrateAudio()
         }
       }
     }
