@@ -192,7 +192,7 @@ export function MiniPlayer() {
           )
         })()}
 
-        <div className="flex items-center justify-center space-x-2">
+        <div className="flex items-center justify-center space-x-4">
           {/* Volume Control */}
           <div className="relative">
             <Button
@@ -224,13 +224,17 @@ export function MiniPlayer() {
               </div>
             )}
           </div>
-          {/* Previous button with segment info */}
-          <div className="flex flex-col items-center">
-            <span className="text-xs text-muted-foreground mb-1">
+
+          {/* Playback Controls */}
+          <div className="flex items-center gap-4">
+            {/* Previous Part Number */}
+            <span className="text-xs text-muted-foreground">
               {currentItem && currentItem.currentSegment > 0
                 ? `Part ${currentItem.currentSegment}`
                 : ''}
             </span>
+
+            {/* Previous Button */}
             <Button
               variant="ghost"
               size="icon"
@@ -239,28 +243,22 @@ export function MiniPlayer() {
             >
               <SkipBack className="h-4 w-4" />
             </Button>
-          </div>
 
-          <Button
-            variant="default"
-            size="icon"
-            onClick={handlePlay}
-            disabled={!currentItem}
-          >
-            {isPlaying ? (
-              <Pause className="h-4 w-4" />
-            ) : (
-              <Play className="h-4 w-4" />
-            )}
-          </Button>
+            {/* Play/Pause Button */}
+            <Button
+              variant="default"
+              size="icon"
+              onClick={handlePlay}
+              disabled={!currentItem}
+            >
+              {isPlaying ? (
+                <Pause className="h-4 w-4" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+            </Button>
 
-          {/* Next button with segment info */}
-          <div className="flex flex-col items-center">
-            <span className="text-xs text-muted-foreground mb-1">
-              {currentItem && currentItem.currentSegment < currentItem.totalSegments - 1
-                ? `Part ${currentItem.currentSegment + 2}`
-                : ''}
-            </span>
+            {/* Next Button */}
             <Button
               variant="ghost"
               size="icon"
@@ -269,6 +267,13 @@ export function MiniPlayer() {
             >
               <SkipForward className="h-4 w-4" />
             </Button>
+
+            {/* Next Part Number */}
+            <span className="text-xs text-muted-foreground">
+              {currentItem && currentItem.currentSegment < currentItem.totalSegments - 1
+                ? `Part ${currentItem.currentSegment + 2}`
+                : ''}
+            </span>
           </div>
         </div>
       </div>
