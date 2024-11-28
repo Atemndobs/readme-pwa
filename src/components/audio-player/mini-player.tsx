@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useAudioQueue } from '@/lib/store/audio-queue'
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { getAudioImage } from '@/lib/utils/image-generator'
 import { ProgressBar } from './progress-bar'
 import { Slider } from '@/components/ui/slider'
 
@@ -41,9 +42,20 @@ export function MiniPlayer() {
   } = useAudioQueue()
 
   const [showVolumeSlider, setShowVolumeSlider] = React.useState(false)
+  const [audioVisual, setAudioVisual] = React.useState<{ url: string | null; background: string }>({
+    url: null,
+    background: 'linear-gradient(45deg, hsl(230, 70%, 50%), hsl(200, 70%, 50%))'
+  })
 
   const currentItem = currentIndex !== null ? queue[currentIndex] : null
   const hasItems = queue.length > 0
+
+  // Update audio visual when current item changes
+  useEffect(() => {
+    if (currentItem) {
+      getAudioImage(currentItem.text, currentItem.voice).then(setAudioVisual)
+    }
+  }, [currentItem?.id])
 
   // Hide player if no items and not converting
   if (!hasItems && !isConverting) {
@@ -89,7 +101,34 @@ export function MiniPlayer() {
   return (
     <Card className="w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="space-y-4 p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
+          {/* Dynamic Image/Gradient */}
+          <div 
+            className="relative w-16 h-16 flex-shrink-0 rounded-md overflow-hidden"
+            style={{ 
+              background: audioVisual.background,
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+            }}
+          >
+            {audioVisual.url ? (
+              <img 
+                src={audioVisual.url} 
+                alt="Audio cover" 
+                className="object-cover w-full h-full transition-opacity duration-200"
+                onError={(e) => {
+                  // On error, we already have the gradient background as fallback
+                  (e.target as HTMLImageElement).style.opacity = '0'
+                }}
+              />
+            ) : (
+              // Optional: Add an icon or wave animation here
+              <div className="absolute inset-0 flex items-center justify-center text-white/80">
+                <Volume2 className="w-8 h-8" />
+              </div>
+            )}
+          </div>
+
+          {/* Title and Status */}
           <div className="flex-1 min-w-0">
             {isConverting ? (
               <div className="flex items-center gap-2">
@@ -129,7 +168,7 @@ export function MiniPlayer() {
                 </div>
               </div>
             ) : (
-              <>
+              <div>
                 <p className="text-sm font-medium truncate">
                   {currentItem?.segments[currentItem.currentSegment]?.text || 'No track selected'}
                 </p>
@@ -137,10 +176,12 @@ export function MiniPlayer() {
                   Part {(currentItem?.currentSegment ?? 0) + 1} of {currentItem?.totalSegments ?? 0}
                   {queue.length > 1 && ` • ${queue.length} items in queue`}
                 </p>
-              </>
+              </div>
             )}
           </div>
-          <div className="flex items-center">
+
+          {/* Controls */}
+          <div className="flex items-center gap-2">
             {isConverting ? (
               <Button
                 variant="ghost"
