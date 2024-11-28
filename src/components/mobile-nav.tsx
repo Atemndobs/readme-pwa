@@ -13,7 +13,12 @@ import {
   SheetHeader,
   SheetTitle,
   SheetTrigger,
+  SheetDescription,
 } from '@/components/ui/sheet'
+import { StorageSettings } from './storage-settings'
+import { StorageIndicator } from './storage-indicator'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { getStorageStats } from '@/lib/utils/storage'
 
 export function MobileNav() {
   return (
@@ -26,6 +31,7 @@ export function MobileNav() {
               <div className="flex items-center">
                 <RefreshButton />
                 <ThemeToggle />
+                <StorageIndicator />
               </div>
             </div>
             
@@ -37,10 +43,24 @@ export function MobileNav() {
               </SheetTrigger>
               <SheetContent>
                 <SheetHeader>
-                  <SheetTitle>Voice Settings</SheetTitle>
+                  <SheetTitle>Settings</SheetTitle>
+                  <SheetDescription>
+                    Configure voice and storage preferences
+                  </SheetDescription>
                 </SheetHeader>
                 <div className="py-6">
-                  <VoiceSelector />
+                  <Tabs defaultValue="voice" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="voice">Voice</TabsTrigger>
+                      <TabsTrigger value="storage">Storage</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="voice" className="mt-4 space-y-4">
+                      <VoiceSelector />
+                    </TabsContent>
+                    <TabsContent value="storage" className="mt-4">
+                      <StorageSettings />
+                    </TabsContent>
+                  </Tabs>
                 </div>
               </SheetContent>
             </Sheet>

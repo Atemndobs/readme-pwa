@@ -37,24 +37,39 @@ export const voices = {
 export type VoiceLanguage = keyof typeof voices;
 export type VoiceId = typeof voices[VoiceLanguage][number]['id'];
 
-interface SettingsState {
+export interface StorageSettings {
+  autoCleanup: boolean;
+  cleanupThreshold: number;
+  retentionDays: number;
+}
+
+export interface SettingsState {
   language: VoiceLanguage;
   voice: VoiceId;
   textInput: string;
   urlInput: string;
   activeTab: 'text' | 'url';
+  storage: StorageSettings;
   setLanguage: (language: VoiceLanguage) => void;
   setVoice: (voice: VoiceId) => void;
   setTextInput: (text: string) => void;
   setUrlInput: (url: string) => void;
   setActiveTab: (tab: 'text' | 'url') => void;
+  setStorage: (storage: StorageSettings) => void;
   clearTextInput: () => void;
   clearUrlInput: () => void;
 }
 
-type PersistedState = Omit<SettingsState, 
-  'setLanguage' | 'setVoice' | 'setTextInput' | 'setUrlInput' | 'setActiveTab' | 'clearTextInput' | 'clearUrlInput'
->
+export type Settings = SettingsState;
+
+interface PersistedState {
+  language: VoiceLanguage;
+  voice: VoiceId;
+  textInput: string;
+  urlInput: string;
+  activeTab: 'text' | 'url';
+  storage: StorageSettings;
+}
 
 export const useSettings = create<SettingsState>()(
   persist(
@@ -64,11 +79,17 @@ export const useSettings = create<SettingsState>()(
       textInput: '',
       urlInput: '',
       activeTab: 'text',
+      storage: {
+        autoCleanup: true,
+        cleanupThreshold: 80,
+        retentionDays: 7
+      },
       setLanguage: (language) => set({ language }),
       setVoice: (voice) => set({ voice }),
       setTextInput: (text) => set({ textInput: text }),
       setUrlInput: (url) => set({ urlInput: url }),
       setActiveTab: (tab) => set({ activeTab: tab }),
+      setStorage: (storage) => set({ storage }),
       clearTextInput: () => set({ textInput: '' }),
       clearUrlInput: () => set({ urlInput: '' }),
     }),
@@ -79,13 +100,15 @@ export const useSettings = create<SettingsState>()(
         if (version === 0) {
           return {
             ...persistedState,
-            textInput: persistedState.textInput || '',
-            urlInput: persistedState.urlInput || '',
-            activeTab: persistedState.activeTab || 'text',
+            storage: {
+              autoCleanup: true,
+              cleanupThreshold: 80,
+              retentionDays: 7
+            }
           }
         }
         return persistedState as PersistedState
-      },
+      }
     }
   )
 )

@@ -24,7 +24,7 @@ function extractKeywords(text: string): string[] {
     .filter(word => word.length > 3 && !commonWords.has(word))
   
   // Get unique words and take the first 3 most relevant ones
-  return [...new Set(words)].slice(0, 3)
+  return Array.from(new Set(words)).slice(0, 3)
 }
 
 export async function getImageForContent(text: string): Promise<{

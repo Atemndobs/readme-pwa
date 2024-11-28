@@ -18,14 +18,21 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
     totalSegments: currentItem?.totalSegments,
     currentSegment: currentItem?.currentSegment,
     currentTime,
-    duration
+    duration,
+    segments: currentItem?.segments.map(s => ({
+      type: s.type,
+      duration: s.audio?.duration,
+      text: s.text?.slice(0, 50) // first 50 chars
+    }))
   })
 
   // Show progress bar for playing and paused states
   if (!currentItem || !['playing', 'paused'].includes(currentItem.status)) {
     console.log('ProgressBar early return:', {
       reason: !currentItem ? 'no current item' : 'status not playable',
-      status: currentItem?.status
+      status: currentItem?.status,
+      currentTime,
+      duration
     })
     return null
   }
@@ -33,7 +40,16 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
   const totalSegments = currentItem.totalSegments
   const currentSegment = currentItem.currentSegment
 
+  console.log('ProgressBar segment info:', {
+    totalSegments,
+    currentSegment,
+    currentTime,
+    duration,
+    progress: (currentTime / duration) * 100
+  })
+
   const handleSeek = (value: number[]) => {
+    console.log('ProgressBar seek:', { value, currentTime, duration })
     onSeek(Math.floor(value[0]))
   }
 
@@ -43,17 +59,31 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
 
   // Format time in MM:SS format
   const formatTime = (time: number) => {
+    if (!time || isNaN(time)) return '0:00'
     const minutes = Math.floor(time / 60)
     const seconds = Math.floor(time % 60)
     return `${minutes}:${seconds.toString().padStart(2, '0')}`
   }
 
+  // Calculate current segment elapsed time
+  const calculateCurrentSegmentElapsed = () => {
+    if (!currentItem) return 0
+    const currentSegmentAudio = currentItem.segments[currentSegment]?.audio
+    if (!currentSegmentAudio) return 0
+    
+    return currentTime || 0
+  }
+
   // Calculate total remaining time across all segments
   const calculateTotalRemainingTime = () => {
+    if (!currentItem) return 0
     let remainingTime = 0
     
-    // Add remaining time in current segment
-    remainingTime += Math.max(0, duration - currentTime)
+    // Get current segment's remaining time
+    const currentSegmentAudio = currentItem.segments[currentSegment]?.audio
+    if (currentSegmentAudio) {
+      remainingTime += Math.max(0, currentSegmentAudio.duration - (currentTime || 0))
+    }
     
     // Add duration of remaining segments
     for (let i = currentSegment + 1; i < currentItem.segments.length; i++) {
@@ -63,6 +93,14 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
       }
     }
     
+    console.log('Time calculation:', {
+      currentSegment,
+      currentTime,
+      currentSegmentDuration: currentSegmentAudio?.duration,
+      remainingTime,
+      totalSegments: currentItem.segments.length
+    })
+    
     return remainingTime
   }
 
@@ -71,11 +109,20 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
       <div className="relative">
         {/* Main slider */}
         <Slider
-          defaultValue={[currentSegment]}
-          max={totalSegments - 1}
-          step={1}
-          value={[currentSegment]}
-          onValueChange={handleSeek}
+          min={0}
+          max={100}
+          step={0.1}
+          value={[currentItem.segments[currentSegment]?.audio ? 
+            (currentTime / currentItem.segments[currentSegment].audio.duration) * 100 : 0
+          ]}
+          onValueChange={value => {
+            const currentSegmentAudio = currentItem.segments[currentSegment]?.audio
+            if (!currentSegmentAudio) return
+            
+            // Convert percentage back to time
+            const targetTime = (value[0] / 100) * currentSegmentAudio.duration
+            currentSegmentAudio.currentTime = targetTime
+          }}
           className="w-full"
         />
         
@@ -102,7 +149,7 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
       {/* Progress info */}
       <div className="flex justify-between text-xs text-muted-foreground">
         <div className="flex gap-4">
-          <span>{formatTime(currentTime)}</span>
+          <span>{formatTime(calculateCurrentSegmentElapsed())}</span>
           <span>Part {currentSegment + 1} of {totalSegments}</span>
         </div>
         <div className="flex gap-4">
