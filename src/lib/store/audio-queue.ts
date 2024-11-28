@@ -132,7 +132,6 @@ export const useAudioQueue = create<AudioQueueStore>()(
               })
               
               console.log('Segment converted:', {
-                segmentId: segment.id,
                 audioDataLength: audioData.length
               })
               
@@ -377,7 +376,6 @@ export const useAudioQueue = create<AudioQueueStore>()(
 
         try {
           console.log('Creating audio from stored data:', {
-            segmentId: segment.id,
             hasAudioData: !!segment.audioData,
             dataPreview: segment.audioData?.substring(0, 100) + '...'
           })
@@ -590,7 +588,6 @@ export const useAudioQueue = create<AudioQueueStore>()(
               })
               
               console.log('Segment converted:', {
-                segmentId: segment.id,
                 audioDataLength: audioData.length
               })
               
