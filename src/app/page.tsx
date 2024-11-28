@@ -11,13 +11,17 @@ import { fetchUrlContent } from '@/lib/api/url-fetch'
 import { toast } from 'sonner'
 import { MobileNav } from '@/components/mobile-nav'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { XIcon, CopyIcon, CheckIcon, Loader2 } from 'lucide-react'
+import { XIcon, CopyIcon, CheckIcon, Loader2, Minimize2, Maximize2, ChevronDown, ClipboardIcon } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
   const [isConverting, setIsConverting] = useState(false)
   const [conversionStatus, setConversionStatus] = useState(0)
+  const [urlInput, setUrlInput] = useState('')
+  const [activeTab, setActiveTab] = useState<'url' | 'text'>('text')
+  const [inputSize, setInputSize] = useState<'compact' | 'full' | 'folded'>('compact')
   const statusMessages = [
     "Analyzing your text...",
     "Warming up the voice box...",
@@ -35,15 +39,21 @@ export default function Home() {
   const { 
     voice,
     textInput,
-    urlInput,
-    activeTab,
     setTextInput,
-    setUrlInput,
-    setActiveTab 
   } = useSettings()
-  const { add, queue } = useAudioQueue()
+  const { 
+    add, 
+    queue 
+  } = useAudioQueue()
   const tabsRef = useRef<HTMLDivElement>(null)
   const contentEditableRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    // Only set innerHTML on the client side
+    if (contentEditableRef.current && textInput) {
+      contentEditableRef.current.innerHTML = textInput
+    }
+  }, [textInput])
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -244,10 +254,67 @@ export default function Home() {
           )}
           <div className="space-y-2">
             <div className="relative">
+              <div className="absolute left-2 top-2 flex gap-1.5 z-50 p-1 rounded-md">
+                {/* Fold Button (like close) */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "h-5 w-5 rounded-full p-0 hover:bg-red-500/20",
+                    inputSize === 'folded' ? "bg-red-500" : "bg-red-500/80",
+                    "transition-colors duration-200"
+                  )}
+                  onClick={() => setInputSize('folded')}
+                  title="Fold view"
+                >
+                  <ChevronDown className="h-3 w-3 text-red-800/80" />
+                </Button>
+
+                {/* Compact Button (like minimize) */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "h-5 w-5 rounded-full p-0 hover:bg-yellow-500/20",
+                    inputSize === 'compact' ? "bg-yellow-500" : "bg-yellow-500/80",
+                    "transition-colors duration-200"
+                  )}
+                  onClick={() => setInputSize('compact')}
+                  title="Compact view"
+                >
+                  <Minimize2 className="h-3 w-3 text-yellow-800/80" />
+                </Button>
+
+                {/* Full Button (like maximize) */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "h-5 w-5 rounded-full p-0 hover:bg-green-500/20",
+                    inputSize === 'full' ? "bg-green-500" : "bg-green-500/80",
+                    "transition-colors duration-200"
+                  )}
+                  onClick={() => setInputSize('full')}
+                  title="Full view"
+                >
+                  <Maximize2 className="h-3 w-3 text-green-800/80" />
+                </Button>
+              </div>
               <div
                 ref={contentEditableRef}
                 contentEditable
-                className="min-h-[200px] max-h-[calc(100vh-300px)] w-full rounded-md border border-input bg-background px-3 pt-10 pb-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 overflow-y-auto relative"
+                style={{
+                  minHeight: inputSize === 'compact' ? '480px' : 
+                           inputSize === 'full' ? 'calc(100vh - 16rem)' : 
+                           '0px',
+                  transition: 'min-height 0.3s ease-in-out',
+                  overflowWrap: 'break-word',
+                  wordBreak: 'break-word'
+                }}
+                className={cn(
+                  "w-full rounded-md border border-input bg-background px-3 pt-14 pb-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 overflow-y-auto relative",
+                  inputSize === 'folded' && "max-h-[0px] overflow-hidden opacity-50 border-0 m-0 p-0"
+                )}
                 onPaste={(e) => {
                   e.preventDefault()
                   const text = e.clipboardData.getData('text/html') || e.clipboardData.getData('text')
@@ -257,11 +324,6 @@ export default function Home() {
                 onInput={() => {
                   setTextInput(contentEditableRef.current?.innerHTML || '')
                 }}
-                style={{ 
-                  overflowWrap: 'break-word',
-                  wordBreak: 'break-word'
-                }}
-                dangerouslySetInnerHTML={{ __html: textInput }}
               />
               <div className="absolute right-2 top-2 flex gap-2 bg-background/80 backdrop-blur-sm p-1 rounded-md z-10">
                 {textInput && (
@@ -288,6 +350,27 @@ export default function Home() {
                       ) : (
                         <CopyIcon className="h-4 w-4" />
                       )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 hover:bg-transparent"
+                      onClick={async () => {
+                        try {
+                          const text = await navigator.clipboard.readText()
+                          if (contentEditableRef.current) {
+                            document.execCommand('insertText', false, text)
+                            setTextInput(contentEditableRef.current.innerHTML)
+                          }
+                        } catch (error) {
+                          console.error('Failed to paste text:', error)
+                          toast.error('Failed to paste text')
+                        }
+                      }}
+                      title="Paste"
+                    >
+                      <ClipboardIcon className="h-4 w-4" />
                     </Button>
                     <Button
                       type="button"

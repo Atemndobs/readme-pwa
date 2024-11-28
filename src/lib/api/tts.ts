@@ -1,7 +1,7 @@
 import { VoiceId } from '../store/settings'
 import { segmentText } from '../utils/text-segmentation'
 
-const TTS_API_URL = '/api/tts'
+const TTS_API_URL = 'http://45.94.111.107:6080/v1/audio/speech'
 
 export class TTSError extends Error {
   constructor(message: string) {
@@ -24,23 +24,43 @@ export async function convertTextToSpeech(text: string, voice: VoiceId, signal?:
 
     for (const segment of segments) {
       try {
+        console.log('Converting segment with voice:', { text: segment.text, voice });
+        
+        // Extract voice name from the model ID (e.g., 'amy' from 'voice-en-us-amy-low')
+        const voiceName = voice.split('-')[3];
+        
         const response = await fetch(TTS_API_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            text: segment.text,
-            voice,
+            model: voice,
+            input: segment.text,
+            voice: voiceName
           }),
-          signal, // Pass the AbortSignal to fetch
+          signal,
         });
 
         if (!response.ok) {
-          throw new TTSError(`Failed to convert text: ${response.statusText}`);
+          const errorText = await response.text();
+          console.error('TTS API Error:', {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorText,
+            request: {
+              text: segment.text,
+              voice,
+            },
+          });
+          throw new TTSError(`Failed to convert text: ${response.statusText} (${errorText})`);
         }
 
         const blob = await response.blob();
+        if (blob.size === 0) {
+          throw new TTSError('Received empty audio data from TTS service');
+        }
+
         audioSegments.push({
           ...segment,
           audio: blob

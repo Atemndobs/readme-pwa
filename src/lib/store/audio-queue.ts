@@ -120,11 +120,18 @@ export const useAudioQueue = create<AudioQueueStore>()(
             const segment = textSegments[i]
             
             try {
+              // Extract voice name from the model ID (e.g., 'amy' from 'voice-en-us-amy-low')
+              const voiceName = voice.split('-')[3];
+              
               // Convert current segment
-              const response = await fetch('/api/tts', {
+              const response = await fetch('http://45.94.111.107:6080/v1/audio/speech', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: segment.text, voice }),
+                body: JSON.stringify({ 
+                  model: voice,
+                  input: segment.text,
+                  voice: voiceName
+                }),
                 signal: abortController.signal
               })
 
@@ -578,10 +585,17 @@ export const useAudioQueue = create<AudioQueueStore>()(
             if (segment.status === 'ready') continue
 
             try {
-              const response = await fetch('/api/tts', {
+              // Extract voice name from the model ID (e.g., 'amy' from 'voice-en-us-amy-low')
+              const voiceName = voice.split('-')[3];
+              
+              const response = await fetch('http://45.94.111.107:6080/v1/audio/speech', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: segment.text, voice }),
+                body: JSON.stringify({ 
+                  model: voice,
+                  input: segment.text,
+                  voice: voiceName
+                }),
                 signal: abortController.signal
               })
 

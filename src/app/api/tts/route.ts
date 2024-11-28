@@ -9,6 +9,7 @@ export async function POST(request: NextRequest) {
 
     // Ensure we have a valid voice model ID
     if (!body.voice?.match(/^voice-[a-z]{2}(-[a-z]{2})?-[a-z]+-low$/)) {
+      console.error('Invalid voice format:', body.voice);
       return NextResponse.json(
         { error: 'Invalid voice model format' },
         { status: 400 }
