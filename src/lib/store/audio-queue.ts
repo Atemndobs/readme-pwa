@@ -20,6 +20,7 @@ interface QueueItem {
   id: string
   text: string
   voice: VoiceId
+  source?: string  // Source URL or title
   segments: AudioSegment[]
   status: QueueItemStatus
   error: string | null
@@ -36,7 +37,7 @@ interface AudioQueueStore {
   conversionAbortController: AbortController | null
   volume: number
   muted: boolean
-  add: (text: string, voice: VoiceId) => Promise<void>
+  add: (text: string, voice: VoiceId, source?: string) => Promise<void>
   remove: (id: string) => void
   clear: () => void
   play: (id?: string, segmentIndex?: number) => Promise<void>
@@ -67,33 +68,39 @@ export const useAudioQueue = create<AudioQueueStore>()(
       volume: 1,
       muted: false,
 
-      add: async (text: string, voice: VoiceId) => {
-        const id = Date.now().toString()
+      add: async (text: string, voice: VoiceId, source?: string) => {
+        // Don't add if already converting
+        if (get().isConverting) {
+          throw new Error('Already converting text to speech')
+        }
+
+        const id = Math.random().toString(36).substring(7)
         const textSegments = segmentText(text)
         const abortController = new AbortController()
         
         set(state => ({
+          isConverting: true,
+          conversionAbortController: abortController,
           queue: [
             ...state.queue,
             {
               id,
               text,
               voice,
-              segments: textSegments.map((segment, index) => ({
-                ...segment,
-                id: `${id}-${index}`,
+              source,
+              segments: textSegments.map(seg => ({
+                ...seg,
+                id: Math.random().toString(36).substring(7),
                 status: 'pending',
                 audioUrl: null,
-                audio: null
+                audio: null,
               })),
+              status: 'converting',
+              error: null,
               currentSegment: 0,
-              totalSegments: textSegments.length,
-              status: 'pending',
-              error: null
+              totalSegments: textSegments.length
             }
-          ],
-          isConverting: true,
-          conversionAbortController: abortController
+          ]
         }))
 
         let firstSegmentConverted = false
@@ -506,39 +513,15 @@ export const useAudioQueue = create<AudioQueueStore>()(
         set(state => {
           const updatedQueue = state.queue.map(item => ({
             ...item,
-            segments: item.segments.map(segment => {
-              if (segment.audioData) {
-                console.log(`Rehydrating segment ${segment.id}:`, {
-                  hasAudioData: true,
-                  dataLength: segment.audioData.length,
-                  preview: segment.audioData.substring(0, 100) + '...'
-                })
-                
-                // Create new blob URL from stored base64 data
-                const byteString = atob(segment.audioData.split(',')[1])
-                const mimeType = segment.audioData.split(',')[0].split(':')[1].split(';')[0]
-                console.log('Audio MIME type:', mimeType)
-                
-                const ab = new ArrayBuffer(byteString.length)
-                const ia = new Uint8Array(ab)
-                for (let i = 0; i < byteString.length; i++) {
-                  ia[i] = byteString.charCodeAt(i)
-                }
-                const blob = new Blob([ab], { type: mimeType })
-                const audioUrl = URL.createObjectURL(blob)
-                console.log('Created new blob URL:', audioUrl)
-                
-                return {
-                  ...segment,
-                  audioUrl,
-                  audio: new Audio(audioUrl)
-                }
-              }
-              console.log(`Segment ${segment.id} has no audio data`)
-              return segment
-            })
+            status: 'pending' as QueueItemStatus,
+            segments: item.segments.map(segment => ({
+              ...segment,
+              status: 'pending' as AudioSegmentStatus,
+              audioUrl: null,
+              audio: null
+            }))
           }))
-          console.log('Rehydration complete. Queue:', updatedQueue)
+          console.log('Queue reset for reconversion:', updatedQueue)
           return { queue: updatedQueue }
         })
       },
@@ -688,10 +671,11 @@ export const useAudioQueue = create<AudioQueueStore>()(
         queue: state.queue.map(item => ({
           ...item,
           segments: item.segments.map(segment => ({
-            ...segment,
-            audio: undefined, // Don't persist Audio objects
-            audioUrl: undefined, // Don't persist URLs
-            // Keep audioData for rehydration
+            id: segment.id,
+            text: segment.text,
+            status: segment.status,
+            error: segment.error,
+            // Don't persist any audio-related data
           }))
         })),
         currentIndex: state.currentIndex,

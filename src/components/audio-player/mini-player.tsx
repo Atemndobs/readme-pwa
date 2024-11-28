@@ -276,6 +276,27 @@ export function MiniPlayer() {
             </span>
           </div>
         </div>
+
+        {/* Source Display */}
+        {currentItem?.source && (
+          <div className="text-center mt-2">
+            <p className="text-xs text-muted-foreground">
+              Source:{' '}
+              {currentItem.source.startsWith('http') ? (
+                <a
+                  href={currentItem.source}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:underline"
+                >
+                  {new URL(currentItem.source).hostname}
+                </a>
+              ) : (
+                currentItem.source
+              )}
+            </p>
+          </div>
+        )}
       </div>
     </Card>
   )

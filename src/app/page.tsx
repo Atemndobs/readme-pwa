@@ -112,7 +112,7 @@ export default function Home() {
       }
       
       console.log('4. Starting text-to-speech conversion...')
-      await add(content.text, voice)
+      await add(content.text, voice, urlInput)
       console.log('5. Text-to-speech conversion completed')
       
       toast.success('Content fetched and conversion started')
