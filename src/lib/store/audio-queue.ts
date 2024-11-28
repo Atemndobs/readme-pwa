@@ -21,6 +21,7 @@ interface QueueItem {
   text: string
   voice: VoiceId
   source?: string  // Source URL or title
+  imageUrl?: string  // URL for the item's image
   segments: AudioSegment[]
   status: QueueItemStatus
   error: string | null
@@ -39,7 +40,7 @@ interface AudioQueueStore {
   muted: boolean
   currentTime: number
   duration: number
-  add: (text: string, voice: VoiceId, source?: string) => Promise<void>
+  add: (text: string, voice: VoiceId, source?: string, imageUrl?: string) => Promise<void>
   remove: (id: string) => void
   clear: () => void
   play: (id?: string, segmentIndex?: number) => Promise<void>
@@ -75,7 +76,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
       currentTime: 0,
       duration: 0,
 
-      add: async (text: string, voice: VoiceId, source?: string) => {
+      add: async (text: string, voice: VoiceId, source?: string, imageUrl?: string) => {
         // Don't add if already converting
         if (get().isConverting) {
           throw new Error('Already converting text to speech')
@@ -95,6 +96,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
               text,
               voice,
               source,
+              imageUrl,
               segments: textSegments.map(seg => ({
                 ...seg,
                 id: Math.random().toString(36).substring(7),
