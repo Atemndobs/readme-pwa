@@ -7,7 +7,7 @@ interface ProgressBarProps {
 }
 
 export function ProgressBar({ onSeek }: ProgressBarProps) {
-  const { queue, currentIndex } = useAudioQueue()
+  const { queue, currentIndex, currentTime, duration } = useAudioQueue()
   const currentItem = currentIndex !== null ? queue[currentIndex] : null
 
   console.log('ProgressBar Component Debug:', {
@@ -16,7 +16,9 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
     hasCurrentItem: !!currentItem,
     status: currentItem?.status,
     totalSegments: currentItem?.totalSegments,
-    currentSegment: currentItem?.currentSegment
+    currentSegment: currentItem?.currentSegment,
+    currentTime,
+    duration
   })
 
   // Show progress bar for playing and paused states
@@ -37,6 +39,31 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
 
   const handleMarkerClick = (index: number) => {
     onSeek(index)
+  }
+
+  // Format time in MM:SS format
+  const formatTime = (time: number) => {
+    const minutes = Math.floor(time / 60)
+    const seconds = Math.floor(time % 60)
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`
+  }
+
+  // Calculate total remaining time across all segments
+  const calculateTotalRemainingTime = () => {
+    let remainingTime = 0
+    
+    // Add remaining time in current segment
+    remainingTime += Math.max(0, duration - currentTime)
+    
+    // Add duration of remaining segments
+    for (let i = currentSegment + 1; i < currentItem.segments.length; i++) {
+      const segment = currentItem.segments[i]
+      if (segment.audio) {
+        remainingTime += segment.audio.duration
+      }
+    }
+    
+    return remainingTime
   }
 
   return (
@@ -74,8 +101,14 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
 
       {/* Progress info */}
       <div className="flex justify-between text-xs text-muted-foreground">
-        <span>Part {currentSegment + 1} of {totalSegments}</span>
-        <span>{currentItem.segments[currentSegment]?.type || 'Text'}</span>
+        <div className="flex gap-4">
+          <span>{formatTime(currentTime)}</span>
+          <span>Part {currentSegment + 1} of {totalSegments}</span>
+        </div>
+        <div className="flex gap-4">
+          <span>{currentItem.segments[currentSegment]?.type || 'Text'}</span>
+          <span>-{formatTime(calculateTotalRemainingTime())}</span>
+        </div>
       </div>
     </div>
   )

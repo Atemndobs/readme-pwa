@@ -37,6 +37,8 @@ interface AudioQueueStore {
   conversionAbortController: AbortController | null
   volume: number
   muted: boolean
+  currentTime: number
+  duration: number
   add: (text: string, voice: VoiceId, source?: string) => Promise<void>
   remove: (id: string) => void
   clear: () => void
@@ -52,9 +54,12 @@ interface AudioQueueStore {
   resumeConversion: (id: string, voice: VoiceId) => Promise<void>
 }
 
-type PersistedState = Omit<AudioQueueStore, 
-  'currentAudio' | 'isPlaying' | 'isConverting' | 'conversionAbortController' | 'add' | 'remove' | 'clear' | 'play' | 'pause' | 'next' | 'previous' | 'setStatus' | 'cancelConversion' | 'setVolume' | 'toggleMute' | 'rehydrateAudio' | 'resumeConversion'
->
+interface PersistedState {
+  queue: QueueItem[];
+  currentIndex: number | null;
+  volume: number;
+  muted: boolean;
+}
 
 export const useAudioQueue = create<AudioQueueStore>()(
   persist(
@@ -67,6 +72,8 @@ export const useAudioQueue = create<AudioQueueStore>()(
       conversionAbortController: null,
       volume: 1,
       muted: false,
+      currentTime: 0,
+      duration: 0,
 
       add: async (text: string, voice: VoiceId, source?: string) => {
         // Don't add if already converting
@@ -249,22 +256,19 @@ export const useAudioQueue = create<AudioQueueStore>()(
       },
 
       clear: () => {
-        set(state => {
-          // Clean up all audio elements
-          if (state.currentAudio) {
-            state.currentAudio.pause()
-            state.currentAudio.currentTime = 0
-          }
-          state.queue.forEach(item => {
-            item.segments.forEach(segment => {
-              if (segment.audio) {
-                segment.audio.pause()
-                segment.audio.src = ''
-                segment.audio.load()
-              }
-            })
-          })
-          return { queue: [], currentIndex: null, isPlaying: false, currentAudio: null }
+        const state = get()
+        if (state.currentAudio) {
+          state.currentAudio.pause()
+          state.currentAudio.src = ''
+          state.currentAudio.load()
+        }
+        set({
+          queue: [],
+          currentIndex: null,
+          isPlaying: false,
+          currentAudio: null,
+          currentTime: 0,
+          duration: 0
         })
       },
 
@@ -339,118 +343,122 @@ export const useAudioQueue = create<AudioQueueStore>()(
       },
 
       play: async (id?: string, segmentIndex?: number) => {
-        console.log('Playing audio...', { id, segmentIndex })
-        const { queue, currentIndex, volume, muted } = get()
-        
-        // Stop current audio if any
-        const currentAudio = get().currentAudio
-        if (currentAudio) {
-          console.log('Stopping current audio')
-          currentAudio.pause()
-          currentAudio.currentTime = 0
+        const state = get()
+        let targetId = id
+        let targetSegmentIndex = segmentIndex
+
+        if (!targetId && state.currentIndex !== null) {
+          const currentItem = state.queue[state.currentIndex]
+          targetId = currentItem.id
+          targetSegmentIndex = currentItem.currentSegment
         }
 
-        // Find the item to play
-        let itemIndex = currentIndex
-        if (id) {
-          itemIndex = queue.findIndex(item => item.id === id)
-          if (itemIndex === -1) {
-            console.error('Item not found:', id)
-            return
+        // If no target specified and no current item, play first item
+        if (!targetId && state.queue.length > 0) {
+          targetId = state.queue[0].id
+          targetSegmentIndex = 0
+        }
+
+        if (!targetId) return
+
+        const itemIndex = state.queue.findIndex(item => item.id === targetId)
+        if (itemIndex === -1) return
+
+        const item = state.queue[itemIndex]
+        
+        // If segment index not specified, use current segment or 0
+        if (targetSegmentIndex === undefined) {
+          targetSegmentIndex = item.currentSegment
+        }
+
+        const segment = item.segments[targetSegmentIndex]
+        if (!segment || !segment.audio) return
+
+        // Clean up current audio
+        if (state.currentAudio) {
+          state.currentAudio.pause()
+          state.currentAudio.src = ''
+          state.currentAudio.load()
+        }
+
+        // Create new handlers
+        let currentTimeUpdateHandler: ((e: Event) => void) | null = null;
+        let currentEndedHandler: ((e: Event) => void) | null = null;
+
+        currentTimeUpdateHandler = () => {
+          if (segment.audio) {
+            set({ 
+              currentTime: segment.audio.currentTime,
+              duration: segment.audio.duration
+            })
           }
-        } else if (itemIndex === null && queue.length > 0) {
-          itemIndex = 0
-        }
+        };
 
-        if (itemIndex === null || itemIndex >= queue.length) {
-          return
-        }
+        currentEndedHandler = async () => {
+          // Clean up current audio
+          if (state.currentAudio) {
+            state.currentAudio.pause()
+            state.currentAudio.src = ''
+            state.currentAudio.load()
+          }
+          
+          // Move to next segment or item
+          const nextSegmentIndex = targetSegmentIndex + 1
+          if (nextSegmentIndex < item.segments.length) {
+            // Play next segment
+            await get().play(targetId, nextSegmentIndex)
+          } else {
+            // Move to next item
+            await get().next()
+          }
+        };
 
-        const item = queue[itemIndex]
-        const segment = item.segments[segmentIndex ?? item.currentSegment]
-        
-        if (!segment || !segment.audioData) {
-          console.error('No audio data available for segment:', segment)
-          throw new Error('No audio data available')
-        }
+        // Add event listeners
+        segment.audio.addEventListener('timeupdate', currentTimeUpdateHandler)
+        segment.audio.addEventListener('ended', currentEndedHandler)
 
+        // Start playback
         try {
-          console.log('Creating audio from stored data:', {
-            hasAudioData: !!segment.audioData,
-            dataPreview: segment.audioData?.substring(0, 100) + '...'
-          })
-          
-          // Create new blob URL from stored base64 data
-          const byteString = atob(segment.audioData.split(',')[1])
-          const mimeType = segment.audioData.split(',')[0].split(':')[1].split(';')[0]
-          console.log('Audio MIME type:', mimeType)
-          
-          const ab = new ArrayBuffer(byteString.length)
-          const ia = new Uint8Array(ab)
-          for (let i = 0; i < byteString.length; i++) {
-            ia[i] = byteString.charCodeAt(i)
-          }
-          const blob = new Blob([ab], { type: mimeType })
-          const audioUrl = URL.createObjectURL(blob)
-          console.log('Created new blob URL:', audioUrl)
-          
-          const audio = new Audio(audioUrl)
-          audio.volume = volume
-          audio.muted = muted
-
-          // Set up event listeners
-          audio.addEventListener('ended', () => {
-            get().next()
-          })
-
-          // Update state and play
-          set({ 
-            currentIndex: itemIndex,
-            currentAudio: audio,
-            isPlaying: true,
-            queue: queue.map((item, index) => 
-              index === itemIndex 
-                ? { ...item, currentSegment: segmentIndex ?? item.currentSegment, status: 'playing' }
-                : item
-            )
-          })
-
-          await audio.play()
-        } catch (error) {
-          console.error('Playback error:', error)
+          await segment.audio.play()
           set(state => ({
-            isPlaying: false,
+            currentIndex: itemIndex,
+            isPlaying: true,
+            currentAudio: segment.audio,
             queue: state.queue.map((item, index) => 
-              index === itemIndex 
-                ? { ...item, status: 'error' as const, error: (error as Error).message || 'Unknown error' }
+              index === itemIndex
+                ? { 
+                    ...item, 
+                    status: 'playing',
+                    currentSegment: targetSegmentIndex 
+                  }
                 : item
             )
           }))
+        } catch (error) {
+          console.error('Playback error:', error)
+          // Clean up current audio
+          if (state.currentAudio) {
+            state.currentAudio.pause()
+            state.currentAudio.src = ''
+            state.currentAudio.load()
+          }
           throw error
         }
       },
 
       pause: () => {
         const state = get()
-        if (state.currentIndex === null) return
-
-        const item = state.queue[state.currentIndex]
-        if (!item) return
-
-        // Pause current audio
         if (state.currentAudio) {
           state.currentAudio.pause()
-          set({ currentAudio: null })
         }
-
-        // Update state
-        set({
+        set(state => ({
           isPlaying: false,
-          queue: state.queue.map((qItem, i) => ({
-            ...qItem,
-            status: i === state.currentIndex ? 'paused' : qItem.status
-          }))
-        })
+          queue: state.queue.map((item, index) => 
+            index === state.currentIndex
+              ? { ...item, status: 'paused' }
+              : item
+          )
+        }))
       },
 
       setStatus: (id: string, status: QueueItemStatus, error?: string) => {
@@ -696,23 +704,15 @@ export const useAudioQueue = create<AudioQueueStore>()(
         queue: state.queue.map(item => ({
           ...item,
           segments: item.segments.map(segment => ({
-            id: segment.id,
-            text: segment.text,
-            status: segment.status,
-            error: segment.error,
-            // Don't persist any audio-related data
+            ...segment,
+            audio: null,
+            audioUrl: null
           }))
         })),
         currentIndex: state.currentIndex,
         volume: state.volume,
         muted: state.muted
-      }),
-      onRehydrateStorage: () => (state) => {
-        if (state) {
-          // Recreate Audio objects from stored URLs
-          state.rehydrateAudio()
-        }
-      }
+      })
     }
   )
 )
