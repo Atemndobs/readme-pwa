@@ -35,7 +35,7 @@ services:
         - NEXT_PUBLIC_API_URL=https://tts.cloud.atemkeng.de/
     container_name: readme-pwa
     platform: linux/amd64
-    image: atemnbobs/readme-pwa:v0.0.1
+    image: atemnbobs/readme-pwa:v0.0.2
     ports:
       - "3007:3000"
     environment:
