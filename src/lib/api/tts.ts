@@ -1,7 +1,7 @@
 import { VoiceId } from '../store/settings'
 import { segmentText } from '../utils/text-segmentation'
 
-const TTS_API_URL = 'http://45.94.111.107:6080/v1/audio/speech'
+const TTS_API_URL = 'https://voice.cloud.atemkeng.de/audio/speech'
 
 export class TTSError extends Error {
   constructor(message: string) {
@@ -17,74 +17,36 @@ interface TTSSegment {
   audio?: Blob;
 }
 
-export async function convertTextToSpeech(text: string, voice: VoiceId, signal?: AbortSignal): Promise<TTSSegment[]> {
+export async function convertTextToSpeech(
+  text: string, 
+  voice: VoiceId
+): Promise<Blob> {
   try {
-    const segments = segmentText(text);
-    const audioSegments: TTSSegment[] = [];
+    const voiceName = voice.split('-')[3];
+    
+    const response = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        model: voice,
+        input: text,
+        voice: voiceName
+      })
+    });
 
-    for (const segment of segments) {
-      try {
-        console.log('Converting segment with voice:', { text: segment.text, voice });
-        
-        // Extract voice name from the model ID (e.g., 'amy' from 'voice-en-us-amy-low')
-        const voiceName = voice.split('-')[3];
-        
-        const response = await fetch(TTS_API_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: voice,
-            input: segment.text,
-            voice: voiceName
-          }),
-          signal,
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('TTS API Error:', {
-            status: response.status,
-            statusText: response.statusText,
-            error: errorText,
-            request: {
-              text: segment.text,
-              voice,
-            },
-          });
-          throw new TTSError(`Failed to convert text: ${response.statusText} (${errorText})`);
-        }
-
-        const blob = await response.blob();
-        if (blob.size === 0) {
-          throw new TTSError('Received empty audio data from TTS service');
-        }
-
-        audioSegments.push({
-          ...segment,
-          audio: blob
-        });
-      } catch (error) {
-        if (error instanceof Error) {
-          if (error.name === 'AbortError') {
-            throw new TTSError('Conversion cancelled');
-          }
-          throw new TTSError(error.message);
-        }
-        throw new TTSError('Failed to convert text to speech');
-      }
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new TTSError(`Failed to convert text to speech: ${errorText}`);
     }
 
-    return audioSegments;
+    return await response.blob();
   } catch (error) {
-    if (error instanceof Error) {
-      if (error.name === 'AbortError') {
-        throw new TTSError('Conversion cancelled');
-      }
-      throw new TTSError(error.message);
-    }
-    throw new TTSError('Failed to convert text to speech');
+    console.error('Text-to-Speech conversion error:', error);
+    throw new TTSError(
+      error instanceof Error 
+        ? error.message 
+        : 'Unknown error during text-to-speech conversion'
+    );
   }
 }
 

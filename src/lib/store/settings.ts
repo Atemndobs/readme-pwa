@@ -43,6 +43,11 @@ interface SettingsState {
   textInput: string;
   urlInput: string;
   activeTab: 'text' | 'url';
+  storage: {
+    autoCleanup: boolean;
+    maxStoragePercentage: number;
+    cleanupThreshold: number;
+  };
   setLanguage: (language: VoiceLanguage) => void;
   setVoice: (voice: VoiceId) => void;
   setTextInput: (text: string) => void;
@@ -50,10 +55,11 @@ interface SettingsState {
   setActiveTab: (tab: 'text' | 'url') => void;
   clearTextInput: () => void;
   clearUrlInput: () => void;
+  setStorage: (storage: SettingsState['storage']) => void;
 }
 
 type PersistedState = Omit<SettingsState, 
-  'setLanguage' | 'setVoice' | 'setTextInput' | 'setUrlInput' | 'setActiveTab' | 'clearTextInput' | 'clearUrlInput'
+  'setLanguage' | 'setVoice' | 'setTextInput' | 'setUrlInput' | 'setActiveTab' | 'clearTextInput' | 'clearUrlInput' | 'setStorage'
 >
 
 export const useSettings = create<SettingsState>()(
@@ -64,6 +70,11 @@ export const useSettings = create<SettingsState>()(
       textInput: '',
       urlInput: '',
       activeTab: 'text',
+      storage: {
+        autoCleanup: true,
+        maxStoragePercentage: 90,
+        cleanupThreshold: 80,
+      },
       setLanguage: (language) => set({ language }),
       setVoice: (voice) => set({ voice }),
       setTextInput: (text) => set({ textInput: text }),
@@ -71,6 +82,7 @@ export const useSettings = create<SettingsState>()(
       setActiveTab: (tab) => set({ activeTab: tab }),
       clearTextInput: () => set({ textInput: '' }),
       clearUrlInput: () => set({ urlInput: '' }),
+      setStorage: (storage) => set({ storage }),
     }),
     {
       name: 'readme-settings',
@@ -82,6 +94,11 @@ export const useSettings = create<SettingsState>()(
             textInput: persistedState.textInput || '',
             urlInput: persistedState.urlInput || '',
             activeTab: persistedState.activeTab || 'text',
+            storage: {
+              autoCleanup: true,
+              maxStoragePercentage: 90,
+              cleanupThreshold: 80,
+            },
           }
         }
         return persistedState as PersistedState

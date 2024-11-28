@@ -5,8 +5,11 @@ import { RefreshButton } from './refresh-button'
 import { ThemeToggle } from './theme-toggle'
 import { VoiceSelector } from './voice-selector'
 import { VoiceInfo } from './voice-info'
+import { StorageIndicator } from './storage-indicator'
+import { StorageSettings } from './storage-settings'
 import { Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Sheet,
   SheetContent,
@@ -23,8 +26,9 @@ export function MobileNav() {
           <div className="flex flex-1 items-center justify-between">
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold">ReadMe</h1>
-              <div className="flex items-center">
+              <div className="flex items-center space-x-2">
                 <RefreshButton />
+                <StorageIndicator />
                 <ThemeToggle />
               </div>
             </div>
@@ -37,10 +41,21 @@ export function MobileNav() {
               </SheetTrigger>
               <SheetContent>
                 <SheetHeader>
-                  <SheetTitle>Voice Settings</SheetTitle>
+                  <SheetTitle>Settings</SheetTitle>
                 </SheetHeader>
                 <div className="py-6">
-                  <VoiceSelector />
+                  <Tabs defaultValue="voice" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="voice">Voice</TabsTrigger>
+                      <TabsTrigger value="storage">Storage</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="voice" className="mt-6">
+                      <VoiceSelector />
+                    </TabsContent>
+                    <TabsContent value="storage" className="mt-6">
+                      <StorageSettings />
+                    </TabsContent>
+                  </Tabs>
                 </div>
               </SheetContent>
             </Sheet>

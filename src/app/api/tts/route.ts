@@ -1,82 +1,106 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const TTS_API_URL = 'http://45.94.111.107:6080/v1/audio/speech';
+const TTS_API_URL = 'https://voice.cloud.atemkeng.de/audio/speech';
 
 export async function POST(request: NextRequest) {
+  // Handle CORS preflight request
+  if (request.method === 'OPTIONS') {
+    return new NextResponse(null, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    });
+  }
+
   try {
     const body = await request.json();
     console.log('TTS API Request:', { body });
 
-    // Ensure we have a valid voice model ID
-    if (!body.voice?.match(/^voice-[a-z]{2}(-[a-z]{2})?-[a-z]+-low$/)) {
-      console.error('Invalid voice format:', body.voice);
+    // Flexible input parsing
+    const model = body.model || body.voice;
+    const input = body.input || body.text;
+    const voiceName = body.voice || (model ? model.split('-')[3] : undefined);
+
+    // Validate inputs
+    if (!model || !input || !voiceName) {
+      console.error('Invalid request body:', body);
       return NextResponse.json(
-        { error: 'Invalid voice model format' },
-        { status: 400 }
+        { error: 'Missing required parameters: model/voice, input/text' },
+        { 
+          status: 400,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
       );
     }
 
-    // Extract voice name from the model ID (e.g., 'amy' from 'voice-en-us-amy-low')
-    const voiceName = body.voice.split('-')[3];
-
-    const response = await fetch(TTS_API_URL, {
+    // Prepare request to TTS service
+    const ttsResponse = await fetch(TTS_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: body.voice, // Use the full model ID
-        input: body.text, // Text to convert
-        voice: voiceName // Just the voice name
+        model: model,
+        input: input,
+        voice: voiceName
       }),
     });
 
-    console.log('TTS API Response Status:', response.status);
-    console.log('TTS API Response Headers:', Object.fromEntries(response.headers.entries()));
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('TTS API Error:', {
-        status: response.status,
-        statusText: response.statusText,
-        body: errorText
-      });
+    // Check TTS service response
+    if (!ttsResponse.ok) {
+      const errorText = await ttsResponse.text();
+      console.error('TTS service error:', errorText);
       return NextResponse.json(
-        { error: `Failed to convert text to speech: ${response.statusText}` },
-        { status: response.status }
+        { error: `Failed to convert text to speech: ${errorText}` },
+        { 
+          status: ttsResponse.status,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
       );
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    console.log('Response Size:', arrayBuffer.byteLength);
-
+    // Process the audio response
+    const arrayBuffer = await ttsResponse.arrayBuffer();
+    
     if (arrayBuffer.byteLength === 0) {
       console.error('Empty response from TTS API');
       return NextResponse.json(
         { error: 'Received empty response from TTS service' },
-        { status: 500 }
+        { 
+          status: 500,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
       );
     }
 
-    // Create a new Response with the audio data
-    const audioResponse = new NextResponse(arrayBuffer, {
+    // Return the audio response
+    return new NextResponse(arrayBuffer, {
+      status: 200,
       headers: {
         'Content-Type': 'audio/mpeg',
         'Content-Length': arrayBuffer.byteLength.toString(),
+        'Access-Control-Allow-Origin': '*',
       },
     });
 
-    console.log('Sending Audio Response:', {
-      size: arrayBuffer.byteLength,
-      headers: Object.fromEntries(audioResponse.headers.entries())
-    });
-
-    return audioResponse;
   } catch (error) {
     console.error('TTS API Error:', error);
     return NextResponse.json(
       { error: 'Failed to process text-to-speech request' },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+        },
+      }
     );
   }
 }

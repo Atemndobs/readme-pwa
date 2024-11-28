@@ -124,7 +124,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
               const voiceName = voice.split('-')[3];
               
               // Convert current segment
-              const response = await fetch('http://45.94.111.107:6080/v1/audio/speech', {
+              const response = await fetch('/api/tts', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
@@ -588,7 +588,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
               // Extract voice name from the model ID (e.g., 'amy' from 'voice-en-us-amy-low')
               const voiceName = voice.split('-')[3];
               
-              const response = await fetch('http://45.94.111.107:6080/v1/audio/speech', {
+              const response = await fetch('/api/tts', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
