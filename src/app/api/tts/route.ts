@@ -60,13 +60,14 @@ export async function POST(request: NextRequest) {
     // Create a new Response with the audio data
     const audioResponse = new NextResponse(arrayBuffer, {
       headers: {
-        'Content-Type': 'audio/mpeg',
+        'Content-Type': 'audio/wav',
         'Content-Length': arrayBuffer.byteLength.toString(),
       },
     });
 
     console.log('Sending Audio Response:', {
       size: arrayBuffer.byteLength,
+      type: 'audio/wav',
       headers: Object.fromEntries(audioResponse.headers.entries())
     });
 

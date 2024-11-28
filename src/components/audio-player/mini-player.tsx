@@ -18,8 +18,10 @@ import {
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { getAudioImage } from '@/lib/utils/image-generator'
+import { performCleanup } from '@/lib/utils/storage-cleanup'
 import { ProgressBar } from './progress-bar'
 import { Slider } from '@/components/ui/slider'
+import Image from 'next/image'
 
 export function MiniPlayer() {
   const { 
@@ -50,6 +52,22 @@ export function MiniPlayer() {
   const currentItem = currentIndex !== null ? queue[currentIndex] : null
   const hasItems = queue.length > 0
 
+  // Debug current state
+  React.useEffect(() => {
+    console.log('MiniPlayer State:', {
+      queueLength: queue.length,
+      currentIndex,
+      isPlaying,
+      currentItem: currentItem ? {
+        id: currentItem.id,
+        status: currentItem.status,
+        totalSegments: currentItem.totalSegments,
+        currentSegment: currentItem.currentSegment,
+        readySegments: currentItem.segments.filter(s => s.status === 'ready').length
+      } : null
+    })
+  }, [queue, currentIndex, isPlaying, currentItem])
+
   // Update audio visual when current item changes
   useEffect(() => {
     if (currentItem) {
@@ -59,11 +77,17 @@ export function MiniPlayer() {
 
   // Hide player if no items and not converting
   if (!hasItems && !isConverting) {
+    console.log('MiniPlayer hidden: no items and not converting')
     return null
   }
 
   const handlePlay = async () => {
     try {
+      console.log('Play button clicked:', { isPlaying, currentIndex })
+      
+      // Run cleanup if needed before playing
+      await performCleanup()
+      
       if (isPlaying) {
         pause()
       } else {
@@ -77,6 +101,9 @@ export function MiniPlayer() {
 
   const handleNext = async () => {
     try {
+      console.log('Next button clicked')
+      // Run cleanup if needed before loading next
+      await performCleanup()
       await next()
     } catch (error) {
       console.error('Next track error:', error)
@@ -86,6 +113,9 @@ export function MiniPlayer() {
 
   const handlePrevious = async () => {
     try {
+      console.log('Previous button clicked')
+      // Run cleanup if needed before loading previous
+      await performCleanup()
       await previous()
     } catch (error) {
       console.error('Previous track error:', error)
@@ -94,6 +124,7 @@ export function MiniPlayer() {
   }
 
   const handleClearQueue = () => {
+    console.log('Clearing queue')
     clear()
     toast.success('Queue cleared')
   }
@@ -111,10 +142,12 @@ export function MiniPlayer() {
             }}
           >
             {audioVisual.url ? (
-              <img 
+              <Image 
                 src={audioVisual.url} 
                 alt="Audio cover" 
-                className="object-cover w-full h-full transition-opacity duration-200"
+                fill
+                className="object-cover"
+                sizes="64px"
                 onError={(e) => {
                   // On error, we already have the gradient background as fallback
                   (e.target as HTMLImageElement).style.opacity = '0'
@@ -215,14 +248,26 @@ export function MiniPlayer() {
             status: currentItem?.status,
             totalSegments: currentItem?.totalSegments,
             currentSegment: currentItem?.currentSegment,
-            segments: currentItem?.segments
+            segments: currentItem?.segments.map(s => ({
+              id: s.id,
+              status: s.status,
+              hasAudio: !!s.audio,
+              audioUrl: s.audioUrl,
+              error: s.error
+            }))
           })
           
-          // Show progress bar when playing or paused
-          return currentItem && ['playing', 'paused'].includes(currentItem.status) && (
+          const shouldShowProgress = currentItem && ['playing', 'paused'].includes(currentItem.status)
+          console.log('Should show progress bar:', shouldShowProgress, {
+            itemStatus: currentItem?.status,
+            segmentsReady: currentItem?.segments.every(s => s.status === 'ready')
+          })
+
+          return shouldShowProgress && (
             <div className="space-y-2">
               <ProgressBar onSeek={async (segmentIndex) => {
                 try {
+                  console.log('Seeking to segment:', segmentIndex)
                   await play(currentItem.id, segmentIndex)
                 } catch (error) {
                   console.error('Seek error:', error)
