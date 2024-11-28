@@ -131,6 +131,11 @@ export const useAudioQueue = create<AudioQueueStore>()(
                 reader.readAsDataURL(audioBlob)
               })
               
+              console.log('Segment converted:', {
+                segmentId: segment.id,
+                audioDataLength: audioData.length
+              })
+              
               const audioUrl = URL.createObjectURL(audioBlob)
               const audio = new Audio(audioUrl)
 
@@ -513,15 +518,33 @@ export const useAudioQueue = create<AudioQueueStore>()(
         set(state => {
           const updatedQueue = state.queue.map(item => ({
             ...item,
-            status: 'pending' as QueueItemStatus,
-            segments: item.segments.map(segment => ({
-              ...segment,
-              status: 'pending' as AudioSegmentStatus,
-              audioUrl: null,
-              audio: null
-            }))
+            status: 'ready' as QueueItemStatus,
+            segments: item.segments.map(segment => {
+              console.log('Processing segment:', segment.id, 'with audioData:', !!segment.audioData)
+              if (segment.audioData) {
+                const byteString = atob(segment.audioData.split(',')[1])
+                const mimeType = segment.audioData.split(',')[0].split(':')[1].split(';')[0]
+                const ab = new ArrayBuffer(byteString.length)
+                const ia = new Uint8Array(ab)
+                for (let i = 0; i < byteString.length; i++) {
+                  ia[i] = byteString.charCodeAt(i)
+                }
+                const blob = new Blob([ab], { type: mimeType })
+                const audioUrl = URL.createObjectURL(blob)
+                const audio = new Audio(audioUrl)
+                console.log('Rehydrated audio for segment:', segment.id)
+                return {
+                  ...segment,
+                  status: 'ready' as AudioSegmentStatus,
+                  audioUrl,
+                  audio
+                }
+              }
+              console.warn('No audioData found for segment:', segment.id)
+              return segment
+            })
           }))
-          console.log('Queue reset for reconversion:', updatedQueue)
+          console.log('Queue rehydrated:', updatedQueue)
           return { queue: updatedQueue }
         })
       },
@@ -564,6 +587,11 @@ export const useAudioQueue = create<AudioQueueStore>()(
               const audioData = await new Promise<string>((resolve) => {
                 reader.onloadend = () => resolve(reader.result as string)
                 reader.readAsDataURL(audioBlob)
+              })
+              
+              console.log('Segment converted:', {
+                segmentId: segment.id,
+                audioDataLength: audioData.length
               })
               
               const audioUrl = URL.createObjectURL(audioBlob)
