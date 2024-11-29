@@ -23,7 +23,7 @@ import { ProgressBar } from './progress-bar'
 import { Slider } from '@/components/ui/slider'
 import Image from 'next/image'
 import { isIOSSafari } from '@/lib/utils/device';
-import { setUserInteraction } from '@/lib/utils/ios-audio';
+import { setUserInteraction, handleIOSAudioInit } from '@/lib/utils/ios-audio';
 
 export function MiniPlayer() {
   const { 
@@ -81,13 +81,26 @@ export function MiniPlayer() {
   // Show a toast when user interaction is required (iOS)
   React.useEffect(() => {
     if (requiresUserInteraction) {
-      toast({
-        title: "Tap to Enable Audio",
+      toast("Tap to Enable Audio", {
         description: "Please tap the play button to enable audio playback",
         duration: 5000,
       })
     }
   }, [requiresUserInteraction])
+
+  // Initialize audio context for iOS when component mounts
+  React.useEffect(() => {
+    if (isIOSSafari()) {
+      handleIOSAudioInit().then(success => {
+        if (!success) {
+          toast("Tap to Enable Audio", {
+            description: "Please tap the play button to enable audio playback",
+            duration: 5000,
+          })
+        }
+      });
+    }
+  }, []);
 
   if (!hasItems && !isConverting) {
     console.log('MiniPlayer hidden: no items and not converting')
@@ -111,15 +124,14 @@ export function MiniPlayer() {
       
       // Handle iOS interaction requirement
       if (error instanceof Error && error.message.includes('iOS requires user interaction')) {
-        toast({
-          title: "Tap Again",
+        toast("Tap Again", {
           description: "Please tap play again to start audio",
           duration: 3000,
         });
         return; // Don't show error toast
       }
       
-      toast.error('Failed to play audio');
+      toast.error("Failed to play audio");
     }
   };
 
@@ -131,7 +143,7 @@ export function MiniPlayer() {
       await next()
     } catch (error) {
       console.error('Next track error:', error)
-      toast.error('Failed to play next track')
+      toast.error("Failed to play next track")
     }
   }
 
@@ -143,14 +155,14 @@ export function MiniPlayer() {
       await previous()
     } catch (error) {
       console.error('Previous track error:', error)
-      toast.error('Failed to play previous track')
+      toast.error("Failed to play previous track")
     }
   }
 
   const handleClearQueue = () => {
     console.log('Clearing queue')
     clear()
-    toast.success('Queue cleared')
+    toast.success("Queue cleared")
   }
 
   const PlayButton = () => {
@@ -281,7 +293,7 @@ export function MiniPlayer() {
                 className="h-6 w-6 hover:bg-red-100 hover:text-red-600"
                 onClick={() => {
                   cancelConversion()
-                  toast.success('Conversion cancelled')
+                  toast.success("Conversion cancelled")
                 }}
               >
                 <X className="h-4 w-4" />
@@ -330,7 +342,7 @@ export function MiniPlayer() {
                   await play(currentItem.id, segmentIndex)
                 } catch (error) {
                   console.error('Seek error:', error)
-                  toast.error('Failed to seek to position')
+                  toast.error("Failed to seek to position")
                 }
               }} />
             </div>

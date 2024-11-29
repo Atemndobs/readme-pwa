@@ -265,10 +265,13 @@ export const useAudioQueue = create<AudioQueueStore>()(
               }
             })
 
-            // If this is the first segment and no other items are playing, start playback
-            if (i === 0 && !get().isPlaying && get().currentIndex === null) {
+            // If this is the first segment and no other items are playing, start playback (except on iOS)
+            if (i === 0 && !get().isPlaying && get().currentIndex === null && !isIOSSafari()) {
               console.log('Starting playback of first segment')
               await get().play(id, 0)
+            } else if (i === 0 && isIOSSafari()) {
+              console.log('On iOS Safari - waiting for user interaction before playing')
+              set({ requiresUserInteraction: true })
             }
           }
 
