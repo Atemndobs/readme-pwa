@@ -20,15 +20,15 @@ NC='\033[0m' # No Color
 
 echo -e "${YELLOW}Starting production deployment process...${NC}"
 
-# Build production image
+# Build production image locally
 echo -e "${GREEN}Building production Docker image...${NC}"
 docker buildx build \
   --platform linux/amd64 \
   --target runner \
   --build-arg NEXT_PUBLIC_API_URL=$PROD_URL \
-  -t $DOCKER_REGISTRY/$APP_NAME:latest \
-  -t $DOCKER_REGISTRY/$APP_NAME:$VERSION \
-  --push \
+  -t $APP_NAME:latest \
+  -t $APP_NAME:$VERSION \
+  --load \
   ..
 
 # Create deployment script for the server
@@ -54,23 +54,22 @@ fi
 echo "Downloading latest docker-compose.yml..."
 wget -O docker-compose.yml https://raw.githubusercontent.com/Atemndobs/readme-pwa/main/docker-compose.yml
 
-# Pull the latest image
-echo "Pulling latest Docker image..."
-docker compose pull prod
-
-# Stop and remove existing container
+# Stop and remove existing container if running
 if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
     echo "Stopping existing container..."
-    docker compose down
+    docker stop $CONTAINER_NAME
+    docker rm $CONTAINER_NAME
 fi
 
 # Start the new container
 echo "Starting new container..."
-docker compose up -d prod
-
-# Clean up old images
-echo "Cleaning up old images..."
-docker image prune -f
+docker run -d \
+  --name $CONTAINER_NAME \
+  -p 3007:3000 \
+  -e NODE_ENV=production \
+  -e NEXT_PUBLIC_API_URL=$PROD_URL \
+  --restart unless-stopped \
+  $APP_NAME:latest
 
 # Check container health
 echo "Checking container health..."
