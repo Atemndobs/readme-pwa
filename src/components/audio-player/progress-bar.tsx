@@ -10,46 +10,16 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
   const { queue, currentIndex, currentTime, duration } = useAudioQueue()
   const currentItem = currentIndex !== null ? queue[currentIndex] : null
 
-  console.log('ProgressBar Component Debug:', {
-    hasQueue: queue.length > 0,
-    currentIndex,
-    hasCurrentItem: !!currentItem,
-    status: currentItem?.status,
-    totalSegments: currentItem?.totalSegments,
-    currentSegment: currentItem?.currentSegment,
-    currentTime,
-    duration,
-    segments: currentItem?.segments.map(s => ({
-      type: s.type,
-      duration: s.audio?.duration,
-      text: s.text?.slice(0, 50) // first 50 chars
-    }))
-  })
-
   // Show progress bar for playing and paused states
   if (!currentItem || !['playing', 'paused'].includes(currentItem.status)) {
-    console.log('ProgressBar early return:', {
-      reason: !currentItem ? 'no current item' : 'status not playable',
-      status: currentItem?.status,
-      currentTime,
-      duration
-    })
     return null
   }
 
   const totalSegments = currentItem.totalSegments
   const currentSegment = currentItem.currentSegment
-
-  console.log('ProgressBar segment info:', {
-    totalSegments,
-    currentSegment,
-    currentTime,
-    duration,
-    progress: (currentTime / duration) * 100
-  })
+  const currentSegmentAudio = currentItem.segments[currentSegment]?.audio
 
   const handleSeek = (value: number[]) => {
-    console.log('ProgressBar seek:', { value, currentTime, duration })
     onSeek(Math.floor(value[0]))
   }
 
@@ -67,11 +37,8 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
 
   // Calculate current segment elapsed time
   const calculateCurrentSegmentElapsed = () => {
-    if (!currentItem) return 0
-    const currentSegmentAudio = currentItem.segments[currentSegment]?.audio
-    if (!currentSegmentAudio) return 0
-    
-    return currentTime || 0
+    if (!currentSegmentAudio || !currentTime) return 0
+    return currentTime
   }
 
   // Calculate total remaining time across all segments
@@ -80,7 +47,6 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
     let remainingTime = 0
     
     // Get current segment's remaining time
-    const currentSegmentAudio = currentItem.segments[currentSegment]?.audio
     if (currentSegmentAudio) {
       remainingTime += Math.max(0, currentSegmentAudio.duration - (currentTime || 0))
     }
@@ -88,20 +54,18 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
     // Add duration of remaining segments
     for (let i = currentSegment + 1; i < currentItem.segments.length; i++) {
       const segment = currentItem.segments[i]
-      if (segment.audio) {
+      if (segment.audio?.duration) {
         remainingTime += segment.audio.duration
       }
     }
     
-    console.log('Time calculation:', {
-      currentSegment,
-      currentTime,
-      currentSegmentDuration: currentSegmentAudio?.duration,
-      remainingTime,
-      totalSegments: currentItem.segments.length
-    })
-    
     return remainingTime
+  }
+
+  // Calculate current progress percentage
+  const calculateProgress = () => {
+    if (!currentSegmentAudio?.duration || !currentTime) return 0
+    return (currentTime / currentSegmentAudio.duration) * 100
   }
 
   return (
@@ -112,16 +76,13 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
           min={0}
           max={100}
           step={0.1}
-          value={[currentItem.segments[currentSegment]?.audio ? 
-            (currentTime / currentItem.segments[currentSegment].audio.duration) * 100 : 0
-          ]}
+          value={[calculateProgress()]}
           onValueChange={value => {
-            const currentSegmentAudio = currentItem.segments[currentSegment]?.audio
-            if (!currentSegmentAudio) return
-            
-            // Convert percentage back to time
+            if (!currentSegmentAudio?.duration) return
             const targetTime = (value[0] / 100) * currentSegmentAudio.duration
-            currentSegmentAudio.currentTime = targetTime
+            if (currentSegmentAudio) {
+              currentSegmentAudio.currentTime = targetTime
+            }
           }}
           className="w-full"
         />
