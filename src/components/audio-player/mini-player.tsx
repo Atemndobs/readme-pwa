@@ -22,6 +22,8 @@ import { performCleanup } from '@/lib/utils/storage-cleanup'
 import { ProgressBar } from './progress-bar'
 import { Slider } from '@/components/ui/slider'
 import Image from 'next/image'
+import { isIOSSafari } from '@/lib/utils/device';
+import { setUserInteraction } from '@/lib/utils/ios-audio';
 
 export function MiniPlayer() {
   const { 
@@ -40,7 +42,8 @@ export function MiniPlayer() {
     volume,
     setVolume,
     muted,
-    toggleMute
+    toggleMute,
+    requiresUserInteraction
   } = useAudioQueue()
 
   const [showVolumeSlider, setShowVolumeSlider] = React.useState(false)
@@ -69,13 +72,23 @@ export function MiniPlayer() {
   }, [queue, currentIndex, isPlaying, currentItem])
 
   // Update audio visual when current item changes
-  useEffect(() => {
+  React.useEffect(() => {
     if (currentItem) {
       getAudioImage(currentItem.text, currentItem.voice).then(setAudioVisual)
     }
   }, [currentItem?.id])
 
-  // Hide player if no items and not converting
+  // Show a toast when user interaction is required (iOS)
+  React.useEffect(() => {
+    if (requiresUserInteraction) {
+      toast({
+        title: "Tap to Enable Audio",
+        description: "Please tap the play button to enable audio playback",
+        duration: 5000,
+      })
+    }
+  }, [requiresUserInteraction])
+
   if (!hasItems && !isConverting) {
     console.log('MiniPlayer hidden: no items and not converting')
     return null
@@ -83,21 +96,32 @@ export function MiniPlayer() {
 
   const handlePlay = async () => {
     try {
-      console.log('Play button clicked:', { isPlaying, currentIndex })
-      
-      // Run cleanup if needed before playing
-      await performCleanup()
-      
-      if (isPlaying) {
-        pause()
-      } else {
-        await play()
+      if (isIOSSafari()) {
+        setUserInteraction(true);
       }
+
+      if (isPlaying) {
+        pause();
+        return;
+      }
+
+      await play();
     } catch (error) {
-      console.error('Playback error:', error)
-      toast.error('Failed to play audio')
+      console.error('Play error:', error);
+      
+      // Handle iOS interaction requirement
+      if (error instanceof Error && error.message.includes('iOS requires user interaction')) {
+        toast({
+          title: "Tap Again",
+          description: "Please tap play again to start audio",
+          duration: 3000,
+        });
+        return; // Don't show error toast
+      }
+      
+      toast.error('Failed to play audio');
     }
-  }
+  };
 
   const handleNext = async () => {
     try {
@@ -128,6 +152,41 @@ export function MiniPlayer() {
     clear()
     toast.success('Queue cleared')
   }
+
+  const PlayButton = () => {
+    const needsInteraction = isIOSSafari() && requiresUserInteraction;
+    const currentItem = queue[currentIndex ?? 0];
+    const isConverting = currentItem?.status === 'converting';
+    
+    return (
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={handlePlay}
+        className="relative"
+        disabled={!currentItem}
+      >
+        {isPlaying ? (
+          <Pause className="h-6 w-6" />
+        ) : (
+          <>
+            <Play className="h-6 w-6" />
+            {needsInteraction && (
+              <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
+              </span>
+            )}
+            {isConverting && (
+              <span className="absolute -bottom-1 -right-1 flex h-3 w-3">
+                <span className="animate-spin absolute inline-flex h-full w-full rounded-full border-2 border-primary border-t-transparent"></span>
+              </span>
+            )}
+          </>
+        )}
+      </Button>
+    );
+  };
 
   return (
     <Card className="w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -331,18 +390,7 @@ export function MiniPlayer() {
             </Button>
 
             {/* Play/Pause Button */}
-            <Button
-              variant="default"
-              size="icon"
-              onClick={handlePlay}
-              disabled={!currentItem}
-            >
-              {isPlaying ? (
-                <Pause className="h-4 w-4" />
-              ) : (
-                <Play className="h-4 w-4" />
-              )}
-            </Button>
+            <PlayButton />
 
             {/* Next Button */}
             <Button

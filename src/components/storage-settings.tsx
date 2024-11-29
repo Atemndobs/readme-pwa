@@ -101,10 +101,10 @@ export function StorageSettings() {
         </div>
 
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1 min-w-0">
               <Label htmlFor="auto-cleanup">Automatic Cleanup</Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground truncate">
                 Automatically clean up old data when storage is full
               </p>
             </div>
@@ -129,7 +129,7 @@ export function StorageSettings() {
               step={5}
             />
             <p className="text-sm text-muted-foreground">
-              Start cleanup when storage usage exceeds this threshold
+              Start cleanup when storage exceeds this threshold
             </p>
           </div>
 
@@ -167,27 +167,28 @@ export function StorageSettings() {
             <ScrollArea className="h-[120px] rounded-md border p-2">
               {Object.entries(storageStats.items).map(([key, size]) => (
                 <div key={key} className="flex justify-between py-1">
-                  <span className="text-sm">{key}</span>
-                  <span className="text-sm text-muted-foreground">{formatSize(size)}</span>
+                  <span className="text-sm truncate flex-1 min-w-0 pr-2">{key}</span>
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">{formatSize(size)}</span>
                 </div>
               ))}
             </ScrollArea>
           </div>
 
-          <div className="flex justify-between">
+          <div className="flex justify-between gap-2 flex-wrap">
             <Button
               variant="destructive"
               onClick={handleClearAll}
+              className="flex-1"
             >
               Clear All
             </Button>
             <Button
-              variant={cleanupNeeded ? "default" : "secondary"}
+              variant={cleanupNeeded ? "default" : "outline"}
               onClick={handleManualCleanup}
+              className="flex-1"
               disabled={!cleanupNeeded}
             >
-              {cleanupNeeded && <AlertTriangle className="w-4 h-4 mr-2" />}
-              Run Cleanup
+              Clean Up Now
             </Button>
           </div>
         </div>
@@ -198,7 +199,7 @@ export function StorageSettings() {
           <DialogHeader>
             <DialogTitle>Clear All Storage</DialogTitle>
             <DialogDescription>
-              Are you sure you want to clear all storage? This action cannot be undone and will remove all saved audio data.
+              This will remove all audio data and reset the queue. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

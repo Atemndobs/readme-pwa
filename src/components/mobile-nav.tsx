@@ -41,14 +41,14 @@ export function MobileNav() {
                   <Settings className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent>
+              <SheetContent side="right" className="w-full sm:max-w-lg">
                 <SheetHeader>
                   <SheetTitle>Settings</SheetTitle>
                   <SheetDescription>
                     Configure voice and storage preferences
                   </SheetDescription>
                 </SheetHeader>
-                <div className="py-6">
+                <div className="flex-1 overflow-y-auto py-6">
                   <Tabs defaultValue="voice" className="w-full">
                     <TabsList className="grid w-full grid-cols-2">
                       <TabsTrigger value="voice">Voice</TabsTrigger>
@@ -58,7 +58,9 @@ export function MobileNav() {
                       <VoiceSelector />
                     </TabsContent>
                     <TabsContent value="storage" className="mt-4">
-                      <StorageSettings />
+                      <div className="h-[calc(100vh-12rem)] overflow-y-auto pb-8">
+                        <StorageSettings />
+                      </div>
                     </TabsContent>
                   </Tabs>
                 </div>
