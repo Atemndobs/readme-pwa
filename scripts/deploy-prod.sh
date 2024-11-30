@@ -48,9 +48,48 @@ NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
 echo -e "${GREEN}Current version: ${CURRENT_VERSION}${NC}"
 echo -e "${GREEN}New version: ${NEW_VERSION}${NC}"
 
-# Update version file
-echo -e "${GREEN}Updating version file...${NC}"
+# Update version file and changelog
+echo -e "${GREEN}Updating version files...${NC}"
 echo "export const APP_VERSION = '${NEW_VERSION}';" > src/utils/version.ts
+
+# Get the latest git log message for changelog
+LATEST_CHANGES=$(git log -1 --pretty=%B)
+TODAY_DATE=$(date +%Y-%m-%d)
+
+# Create new changelog entry
+cat > src/utils/changelog.ts << EOL
+import { APP_VERSION } from './version'
+
+export type VersionInfo = {
+  version: string
+  date: string
+  changes: string[]
+}
+
+export const CHANGELOG: Record<string, VersionInfo> = {
+  [APP_VERSION]: {
+    version: APP_VERSION,
+    date: '${TODAY_DATE}',
+    changes: [
+      '${LATEST_CHANGES}'
+    ]
+  },
+  ['${CURRENT_VERSION}']: {
+    version: '${CURRENT_VERSION}',
+    date: '${TODAY_DATE}',
+    changes: [
+      'Previous stable version'
+    ]
+  }
+}
+
+export const getVersionInfo = (version: string): VersionInfo | undefined => {
+  return CHANGELOG[version]
+}
+
+export const getCurrentVersion = () => APP_VERSION
+export const getPreviousVersionInfo = () => CHANGELOG['${CURRENT_VERSION}']
+EOL
 
 # Build production image locally
 echo -e "${GREEN}Building production Docker image...${NC}"
