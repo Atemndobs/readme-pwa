@@ -56,6 +56,7 @@ export function MiniPlayer() {
   const [initialVolume, setInitialVolume] = useState<number>(0);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
 
+  // Test CI/CD Pipeline - Added comment to trigger deployment
   const currentItem = currentIndex !== null ? queue[currentIndex] : null
   const hasItems = queue.length > 0
 
