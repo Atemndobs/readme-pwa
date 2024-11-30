@@ -17,17 +17,17 @@ export const CHANGELOG: Record<string, VersionInfo> = {
     version: APP_VERSION,
     date: new Date().toISOString().split('T')[0],
     changes: [
-      'Current production version',
-      'Added version switching capability',
-      'Improved deployment process'
+      'Merge pull request #17 from Atemndobs/feature/app-version - Feature/app version',
+      'Added version tracking and changelog',
+      'Improved deployment automation'
     ]
   },
-  [getPreviousVersion()]: {
-    version: getPreviousVersion(),
-    date: new Date(Date.now() - 86400000).toISOString().split('T')[0], // yesterday
+  ['1.0.0']: {
+    version: '1.0.0',
+    date: '2024-11-30',
     changes: [
-      'Previous stable version',
-      'Base functionality'
+      'Initial release',
+      'Base functionality implemented'
     ]
   }
 }
