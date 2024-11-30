@@ -17,12 +17,12 @@ export const CHANGELOG: Record<string, VersionInfo> = {
     version: APP_VERSION,
     date: new Date().toISOString().split('T')[0],
     changes: [
-      'Merge pull request #17 from Atemndobs/feature/app-version - Feature/app version',
-      'Added version tracking and changelog',
-      'Improved deployment automation'
+      'Feature: Add version tracking and changelog',
+      'Improve deployment automation',
+      'Add version display component'
     ]
   },
-  ['1.0.0']: {
+  '0.9.0': {
     version: '1.0.0',
     date: '2024-11-30',
     changes: [
