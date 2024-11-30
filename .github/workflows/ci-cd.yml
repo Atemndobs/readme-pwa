@@ -45,35 +45,19 @@ jobs:
     needs: build-and-test
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    env:
+      APP_NAME: readme-pwa
+      APP_DIR: /home/atem/docker/readme-pwa
+      PROD_URL: https://tts.cloud.atemkeng.de
     
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - name: Deploy to production server
+        uses: appleboy/ssh-action@master
         with:
-          node-version: '18'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build application
-        run: npm run build
-
-      - name: Deploy to production
-        env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USERNAME: ${{ secrets.DEPLOY_USERNAME }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-        run: |
-          # Setup SSH
-          mkdir -p ~/.ssh
-          echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
-
-          # Run deploy script
-          chmod +x ./deploy.sh
-          ./deploy.sh
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USERNAME }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd ${{ env.APP_DIR }}/scripts
+            chmod +x deploy-prod.sh
+            ./deploy-prod.sh

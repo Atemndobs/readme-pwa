@@ -22,13 +22,13 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
     renderConditions: {
       hasCurrentItem: !!currentItem,
       hasValidStatus: currentItem && ['playing', 'paused', 'ready', 'partial'].includes(currentItem.status),
-      hasAudioData: currentItem?.segments.some(s => s.audio?.duration > 0),
+      hasAudioData: currentItem?.segments.some(s => (s.audio?.duration ?? 0) > 0),
       hasCurrentTime: !!currentTime,
       hasDuration: !!duration
     },
     segments: currentItem?.segments.map(s => ({
       type: s.type,
-      duration: s.audio?.duration,
+      duration: s.audio?.duration ?? 0,
       status: s.status,
       hasAudio: !!s.audio,
       text: s.text?.slice(0, 50) // first 50 chars

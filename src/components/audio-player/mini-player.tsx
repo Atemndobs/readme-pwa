@@ -72,13 +72,13 @@ export function MiniPlayer() {
         totalSegments: currentItem.totalSegments,
         currentSegment: currentItem.currentSegment,
         readySegments: currentItem.segments.filter(s => s.status === 'ready').length,
-        hasAudioData: currentItem.segments.some(s => s.audio?.duration > 0),
+        hasAudioData: currentItem.segments.some(s => s.audio?.duration ?? 0 > 0),
         segmentStatuses: currentItem.segments.map(s => s.status)
       } : null,
       shouldShowProgressBar: !!(
         currentItem && 
         ['playing', 'paused', 'ready', 'partial'].includes(currentItem.status) && 
-        currentItem.segments.some(s => s.audio?.duration > 0)
+        currentItem.segments.some(s => (s.audio?.duration ?? 0) > 0)
       )
     })
   }, [queue, currentIndex, isPlaying, currentItem])
