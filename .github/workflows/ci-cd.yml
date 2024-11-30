@@ -19,14 +19,36 @@ jobs:
           node-version: '18'
           cache: 'npm'
 
+      - name: Debug Environment
+        run: |
+          echo "Node version:"
+          node --version
+          echo "NPM version:"
+          npm --version
+          echo "Current directory:"
+          pwd
+          echo "Directory contents:"
+          ls -la
+
       - name: Install dependencies
-        run: npm ci
+        run: |
+          echo "Installing dependencies..."
+          npm ci
+          echo "Installed dependencies successfully"
+          echo "node_modules contents:"
+          ls -la node_modules | head -n 5
 
       - name: Run linting
-        run: npm run lint || true
+        run: |
+          echo "Running linting..."
+          npm run lint
+        continue-on-error: true
 
       - name: Run type checking
-        run: npm run typecheck
+        run: |
+          echo "Running type checking..."
+          npm run typecheck
+        continue-on-error: false
 
   deploy:
     needs: test
