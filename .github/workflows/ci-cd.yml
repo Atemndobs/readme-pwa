@@ -85,9 +85,14 @@ jobs:
             echo "Updating docker-compose.yml..."
             sed -i "s/${APP_NAME}:${CURRENT_VERSION}/${APP_NAME}:${NEW_VERSION}/" docker-compose.yml
             
+            # Stop and remove existing container
+            echo "Cleaning up existing containers..."
+            docker stop readme-pwa || true
+            docker rm readme-pwa || true
+            
             # Deploy with docker-compose
             echo "Deploying new version..."
-            docker-compose up -d
+            docker-compose up -d --force-recreate
             
             # Check container health
             echo "Checking container health..."
