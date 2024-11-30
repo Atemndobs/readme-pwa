@@ -50,10 +50,15 @@ echo -e "${GREEN}New version: ${NEW_VERSION}${NC}"
 
 # Update version file and changelog
 echo -e "${GREEN}Updating version files...${NC}"
+
+# Ensure directories exist
+mkdir -p src/utils
+
+# Update version file
 echo "export const APP_VERSION = '${NEW_VERSION}';" > src/utils/version.ts
 
 # Get the latest git log message for changelog
-LATEST_CHANGES=$(git log -1 --pretty=%B)
+LATEST_CHANGES=$(git log -1 --pretty=%B | sed 's/["\]/\\&/g' | tr '\n' ' ')
 TODAY_DATE=$(date +%Y-%m-%d)
 
 # Create new changelog entry
