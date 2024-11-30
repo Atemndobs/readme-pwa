@@ -552,6 +552,12 @@ export const useAudioQueue = create<AudioQueueStore>()(
             
             audio.src = url;
             await audio.load();
+            
+            // Add ended event listener for auto-play
+            audio.addEventListener('ended', async () => {
+              await get().next();
+            });
+            
             segment.audio = audio;
           }
 
