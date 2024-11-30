@@ -108,7 +108,7 @@ jobs:
             echo "export const APP_VERSION = '${NEW_VERSION}';" > src/utils/version.ts
             
             # Create new changelog entry
-            cat > src/utils/changelog.ts << 'EOL'
+            cat << 'EOLMARK' > src/utils/changelog.ts
 import { APP_VERSION } from './version'
 export type VersionInfo = {
   version: string
@@ -116,15 +116,15 @@ export type VersionInfo = {
   changes: string[]
 }
 export const CHANGELOG: Record<string, VersionInfo> = {
-  "${APP_VERSION}": {
-    version: "${APP_VERSION}",
-    date: "${TODAY_DATE}",
+  "\${APP_VERSION}": {
+    version: "\${APP_VERSION}",
+    date: "\${TODAY_DATE}",
     changes: [
-      "$(echo "${LATEST_CHANGES}" | sed 's/"/\\"/g')"
+      "\$(echo "\${LATEST_CHANGES}" | sed 's/"/\\"/g')"
     ]
   }
 }
-EOL
+EOLMARK
             
             # Build production image locally
             echo "Building production Docker image..."
