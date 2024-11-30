@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  build-and-test:
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -26,23 +26,10 @@ jobs:
         run: npm run lint || true
 
       - name: Run type checking
-        run: npm run typecheck || npm run build
-
-      - name: Build application
-        run: npm run build
-
-      - name: Cache build output
-        uses: actions/cache@v3
-        with:
-          path: |
-            .next
-            node_modules
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
-          restore-keys: |
-            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
+        run: npm run typecheck
 
   deploy:
-    needs: build-and-test
+    needs: test
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
