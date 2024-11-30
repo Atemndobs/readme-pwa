@@ -40,10 +40,17 @@ if ! git pull origin main; then
 fi
 
 # Get current version and calculate new version
-CURRENT_VERSION=$(get_current_version)
-NEW_VERSION=$(increment_version $CURRENT_VERSION)
+CURRENT_VERSION=$(grep -oP "image: ${APP_NAME}:\K[0-9]+\.[0-9]+\.[0-9]+" docker-compose.yml || echo "1.0.0")
+MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
+MINOR=$(echo $CURRENT_VERSION | cut -d. -f2)
+PATCH=$(echo $CURRENT_VERSION | cut -d. -f3)
+NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
 echo -e "${GREEN}Current version: ${CURRENT_VERSION}${NC}"
 echo -e "${GREEN}New version: ${NEW_VERSION}${NC}"
+
+# Update version file
+echo -e "${GREEN}Updating version file...${NC}"
+echo "export const APP_VERSION = '${NEW_VERSION}';" > src/utils/version.ts
 
 # Build production image locally
 echo -e "${GREEN}Building production Docker image...${NC}"

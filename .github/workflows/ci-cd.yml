@@ -71,6 +71,10 @@ jobs:
             echo "Current version: $CURRENT_VERSION"
             echo "New version: $NEW_VERSION"
             
+            # Update version file
+            echo "Updating version file..."
+            echo "export const APP_VERSION = '${NEW_VERSION}';" > src/utils/version.ts
+            
             # Build production image locally
             echo "Building production Docker image..."
             docker buildx build \
