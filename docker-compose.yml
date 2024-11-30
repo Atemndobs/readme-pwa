@@ -1,10 +1,9 @@
-version: '3.8'
+# Test deployment with new SSH key configuration
 
 services:
-  app:
+  readme-pwa:
     build:
       context: .
-      target: runner
       dockerfile: Dockerfile
       args:
         - NEXT_PUBLIC_API_URL=https://tts.cloud.atemkeng.de/
