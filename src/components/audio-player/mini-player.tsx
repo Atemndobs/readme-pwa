@@ -52,12 +52,16 @@ export function MiniPlayer() {
     background: 'linear-gradient(45deg, hsl(230, 70%, 50%), hsl(200, 70%, 50%))'
   })
 
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [initialVolume, setInitialVolume] = useState<number>(0);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+
   const currentItem = currentIndex !== null ? queue[currentIndex] : null
   const hasItems = queue.length > 0
 
-  // Debug current state
+  // Debug current state and progress bar conditions
   React.useEffect(() => {
-    console.log('MiniPlayer State:', {
+    console.log('[PROGRESS_BAR] MiniPlayer State:', {
       queueLength: queue.length,
       currentIndex,
       isPlaying,
@@ -66,8 +70,15 @@ export function MiniPlayer() {
         status: currentItem.status,
         totalSegments: currentItem.totalSegments,
         currentSegment: currentItem.currentSegment,
-        readySegments: currentItem.segments.filter(s => s.status === 'ready').length
-      } : null
+        readySegments: currentItem.segments.filter(s => s.status === 'ready').length,
+        hasAudioData: currentItem.segments.some(s => s.audio?.duration > 0),
+        segmentStatuses: currentItem.segments.map(s => s.status)
+      } : null,
+      shouldShowProgressBar: !!(
+        currentItem && 
+        ['playing', 'paused', 'ready', 'partial'].includes(currentItem.status) && 
+        currentItem.segments.some(s => s.audio?.duration > 0)
+      )
     })
   }, [queue, currentIndex, isPlaying, currentItem])
 
@@ -88,6 +99,29 @@ export function MiniPlayer() {
       })
     }
   }, [requiresUserInteraction])
+
+  // Detect touch device on mount
+  useEffect(() => {
+    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
+  }, []);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartY(e.touches[0].clientY);
+    setInitialVolume(volume);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    e.preventDefault();
+    if (touchStartY === null) return;
+
+    const touchDelta = (touchStartY - e.touches[0].clientY) * 0.005;
+    const newVolume = Math.max(0, Math.min(1, initialVolume + touchDelta));
+    setVolume(newVolume);
+  };
+
+  const handleTouchEnd = () => {
+    setTouchStartY(null);
+  };
 
   if (!hasItems && !isConverting) {
     console.log('MiniPlayer hidden: no items and not converting')
@@ -316,7 +350,7 @@ export function MiniPlayer() {
             }))
           })
           
-          const shouldShowProgress = currentItem && ['playing', 'paused'].includes(currentItem.status)
+          const shouldShowProgress = currentItem && ['playing', 'paused', 'ready', 'partial'].includes(currentItem.status)
           console.log('Should show progress bar:', shouldShowProgress, {
             itemStatus: currentItem?.status,
             segmentsReady: currentItem?.segments.every(s => s.status === 'ready')
@@ -343,31 +377,45 @@ export function MiniPlayer() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="h-8 w-8 relative z-10"
               onClick={toggleMute}
-              onMouseEnter={() => setShowVolumeSlider(true)}
+              onTouchStart={isTouchDevice ? handleTouchStart : undefined}
+              onTouchMove={isTouchDevice ? handleTouchMove : undefined}
+              onTouchEnd={isTouchDevice ? handleTouchEnd : undefined}
             >
-              {muted || volume === 0 ? (
-                <VolumeX className="h-4 w-4" />
-              ) : (
-                <Volume2 className="h-4 w-4" />
-              )}
-            </Button>
-            {showVolumeSlider && (
-              <div 
-                className="absolute bottom-full right-0 mb-2 p-2 bg-background border rounded-md shadow-lg w-32"
-                onMouseLeave={() => setShowVolumeSlider(false)}
-              >
-                <Slider
-                  defaultValue={[volume]}
-                  max={1}
-                  step={0.01}
-                  value={[volume]}
-                  onValueChange={(value) => setVolume(value[0])}
-                  className="w-full"
-                />
+              {/* Volume Icon with circular indicator for mobile */}
+              <div className="relative">
+                {isTouchDevice && touchStartY !== null && (
+                  <>
+                    {/* Background Circle */}
+                    <div 
+                      className="absolute -inset-2 rounded-full border-2 border-muted/30"
+                    />
+                    {/* Progress Circle */}
+                    <svg
+                      className="absolute -inset-2 h-[calc(100%+16px)] w-[calc(100%+16px)] -rotate-90"
+                      viewBox="0 0 32 32"
+                    >
+                      <circle
+                        className="stroke-primary transition-all duration-100"
+                        cx="16"
+                        cy="16"
+                        r="14"
+                        strokeWidth="2"
+                        fill="none"
+                        strokeDasharray={`${2 * Math.PI * 14}`}
+                        strokeDashoffset={`${2 * Math.PI * 14 * (1 - volume)}`}
+                      />
+                    </svg>
+                  </>
+                )}
+                {muted || volume === 0 ? (
+                  <VolumeX className="h-4 w-4" />
+                ) : (
+                  <Volume2 className="h-4 w-4" />
+                )}
               </div>
-            )}
+            </Button>
           </div>
 
           {/* Playback Controls */}
