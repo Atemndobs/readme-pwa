@@ -109,22 +109,22 @@ jobs:
             
             # Create new changelog entry
             cat << 'EOLMARK' > src/utils/changelog.ts
-import { APP_VERSION } from './version'
-export type VersionInfo = {
-  version: string
-  date: string
-  changes: string[]
-}
-export const CHANGELOG: Record<string, VersionInfo> = {
-  "\${APP_VERSION}": {
-    version: "\${APP_VERSION}",
-    date: "\${TODAY_DATE}",
-    changes: [
-      "\$(echo "\${LATEST_CHANGES}" | sed 's/"/\\"/g')"
-    ]
-  }
-}
-EOLMARK
+            import { APP_VERSION } from './version'
+            export type VersionInfo = {
+              version: string
+              date: string
+              changes: string[]
+            }
+            export const CHANGELOG: Record<string, VersionInfo> = {
+              "\${APP_VERSION}": {
+                version: "\${APP_VERSION}",
+                date: "\${TODAY_DATE}",
+                changes: [
+                  "\$(echo "\${LATEST_CHANGES}" | sed 's/"/\\"/g')"
+                ]
+              }
+            }
+            EOLMARK
             
             # Build production image locally
             echo "Building production Docker image..."
