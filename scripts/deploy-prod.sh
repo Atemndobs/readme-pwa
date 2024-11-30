@@ -59,10 +59,15 @@ docker buildx build \
 echo -e "${GREEN}Updating docker-compose.yml...${NC}"
 sed -i "s/${APP_NAME}:${CURRENT_VERSION}/${APP_NAME}:${NEW_VERSION}/" ${APP_DIR}/docker-compose.yml
 
+# Stop and remove existing container
+echo -e "${GREEN}Cleaning up existing containers...${NC}"
+docker stop ${APP_NAME} || true
+docker rm ${APP_NAME} || true
+
 # Deploy with docker-compose
 echo -e "${GREEN}Deploying new version...${NC}"
 cd ${APP_DIR}
-docker-compose up -d
+docker-compose up -d --force-recreate
 
 # Check container health
 echo -e "${GREEN}Checking container health...${NC}"
