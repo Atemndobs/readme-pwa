@@ -45,6 +45,60 @@ jobs:
           username: ${{ secrets.DEPLOY_USERNAME }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
-            cd ${{ env.APP_DIR }}/scripts
-            chmod +x deploy-prod.sh
-            ./deploy-prod.sh
+            # Configuration
+            APP_NAME="readme-pwa"
+            APP_DIR="/home/atem/docker/readme-pwa"
+            PROD_URL="https://tts.cloud.atemkeng.de"
+            
+            echo "Starting production deployment process..."
+            
+            # Pull latest changes from production
+            cd $APP_DIR
+            echo "Pulling latest changes..."
+            git fetch origin main
+            if ! git pull origin main; then
+                echo "Pull failed, resetting branch..."
+                git reset --hard origin/main
+                git pull origin main
+            fi
+            
+            # Get current version and calculate new version
+            CURRENT_VERSION=$(grep -oP "image: ${APP_NAME}:\K[0-9]+\.[0-9]+\.[0-9]+" docker-compose.yml || echo "1.0.0")
+            MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
+            MINOR=$(echo $CURRENT_VERSION | cut -d. -f2)
+            PATCH=$(echo $CURRENT_VERSION | cut -d. -f3)
+            NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+            echo "Current version: $CURRENT_VERSION"
+            echo "New version: $NEW_VERSION"
+            
+            # Build production image locally
+            echo "Building production Docker image..."
+            docker buildx build \
+              --platform linux/amd64 \
+              --target runner \
+              --build-arg NEXT_PUBLIC_API_URL=$PROD_URL \
+              -t $APP_NAME:$NEW_VERSION \
+              --load \
+              .
+            
+            # Update docker-compose.yml with new version
+            echo "Updating docker-compose.yml..."
+            sed -i "s/${APP_NAME}:${CURRENT_VERSION}/${APP_NAME}:${NEW_VERSION}/" docker-compose.yml
+            
+            # Deploy with docker-compose
+            echo "Deploying new version..."
+            docker-compose up -d
+            
+            # Check container health
+            echo "Checking container health..."
+            for i in {1..6}; do
+                if curl -s http://localhost:3007/api/health > /dev/null; then
+                    echo "Application is healthy!"
+                    exit 0
+                fi
+                echo "Waiting for application to become healthy... ($i/6)"
+                sleep 10
+            done
+            
+            echo "Warning: Application health check failed!"
+            exit 1
