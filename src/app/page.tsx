@@ -41,7 +41,7 @@ export default function Home() {
     setUrlInput,
     setActiveTab 
   } = useSettings()
-  const { add, queue } = useAudioQueue()
+  const { add, queue, isPlaying } = useAudioQueue()
   const tabsRef = useRef<HTMLDivElement>(null)
   const contentEditableRef = useRef<HTMLDivElement>(null)
 
@@ -69,6 +69,12 @@ export default function Home() {
     item.status === 'playing' || 
     item.status === 'paused'
   )
+
+  console.debug('Page render:', {
+    isPlaying,
+    shouldHideTabs: isPlaying,
+    queueStatus: queue.map(item => item.status)
+  })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -127,17 +133,18 @@ export default function Home() {
   return (
     <main className="container mx-auto p-4 space-y-4 max-w-2xl pb-32">
       <MobileNav />
-      <MiniPlayer />
       
       <Tabs 
         value={activeTab as string} 
         onValueChange={(value) => setActiveTab(value as "url" | "text")} 
         className="w-full"
       >
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="url">URL</TabsTrigger>
-          <TabsTrigger value="text">Text</TabsTrigger>
-        </TabsList>
+        {!isPlaying && (
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="url">URL</TabsTrigger>
+            <TabsTrigger value="text">Text</TabsTrigger>
+          </TabsList>
+        )}
 
         <TabsContent value="url" className="space-y-4">
           <form onSubmit={handleUrlFetch} className="space-y-4">
@@ -177,7 +184,7 @@ export default function Home() {
         </TabsContent>
 
         <TabsContent value="text" className="space-y-4">
-          {textInput.trim() && (
+          {textInput.trim() && !isPlaying && (
             <Button 
               onClick={handleSubmit}
               disabled={isProcessing || isConverting}
@@ -310,6 +317,8 @@ export default function Home() {
           </div>
         </TabsContent>
       </Tabs>
+
+      <MiniPlayer />
     </main>
   )
 }

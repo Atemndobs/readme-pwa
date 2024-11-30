@@ -1,6 +1,7 @@
 'use client'
 
 import { useSettings, voices, VoiceLanguage, countryFlags } from '@/lib/store/settings'
+import { useAudioQueue } from '@/lib/store/audio-queue'
 import { Button } from '@/components/ui/button'
 import {
   Avatar,
@@ -24,7 +25,6 @@ const languageNames = {
 
 export function VoiceInfo() {
   const { language, voice, setLanguage, setVoice } = useSettings()
-  
   const currentVoice = voices[language].find(v => v.id === voice)
   const languageName = languageNames[language]
 
