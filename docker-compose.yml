@@ -1,32 +1,7 @@
 version: '3.8'
 
 services:
-  # Development service
-  dev:
-    build:
-      context: .
-      target: deps
-      dockerfile: Dockerfile
-    command: npm run dev
-    container_name: readme-pwa-dev
-    ports:
-      - "3000:3000"
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/.next
-    environment:
-      - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:3000
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
-
-  # Production service
-  prod:
+  app:
     build:
       context: .
       target: runner
@@ -35,7 +10,7 @@ services:
         - NEXT_PUBLIC_API_URL=https://tts.cloud.atemkeng.de/
     container_name: readme-pwa
     platform: linux/amd64
-    image: atemnbobs/readme-pwa:v0.0.3
+    image: readme-pwa:latest
     ports:
       - "3007:3000"
     environment:
