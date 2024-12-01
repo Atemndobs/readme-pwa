@@ -236,7 +236,7 @@ export function MiniPlayer() {
   };
 
   return (
-    <Card className="w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <Card className="fixed bottom-0 left-0 right-0 z-50 w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="space-y-4 p-4">
         <div className="flex items-center justify-between gap-4">
           {/* Dynamic Image/Gradient */}

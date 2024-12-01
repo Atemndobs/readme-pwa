@@ -139,7 +139,7 @@ export default function Home() {
   }
 
   return (
-    <main className="container mx-auto p-4 space-y-4 max-w-2xl pb-32">
+    <main className="container mx-auto p-4 space-y-4 max-w-2xl pb-40">
       <MobileNav />
       
       <Tabs 
