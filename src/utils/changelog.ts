@@ -17,6 +17,16 @@ export const CHANGELOG: Record<string, VersionInfo> = {
     version: APP_VERSION,
     date: new Date().toISOString().split('T')[0],
     changes: [
+      'Add: Fixed audio player at bottom of screen',
+      'Update: Move notifications to top of screen',
+      'Fix: Prevent notification overlap with audio player',
+      'Improve: Audio player visibility and accessibility'
+    ]
+  },
+  '0.1.1': {
+    version: '0.1.1',
+    date: '2024-01-10',
+    changes: [
       'Fix: TypeScript error in MobileNav component',
       'Remove conditional rendering of VoiceSelector',
       'Update debug logging',

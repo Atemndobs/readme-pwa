@@ -18,7 +18,7 @@ export default function RootLayoutClient({
     >
       <ClientInit />
       {children}
-      <Toaster position="bottom-center" />
+      <Toaster position="top-center" />
     </ThemeProvider>
   )
 }
