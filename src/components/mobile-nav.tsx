@@ -22,11 +22,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getStorageStats } from '@/lib/utils/storage'
 
 export function MobileNav() {
-  const { isPlaying } = useAudioQueue()
+  const { queue } = useAudioQueue()
+
+  const hasAudioContent = queue.some(item => 
+    item.status === 'ready' || 
+    item.status === 'playing' || 
+    item.status === 'paused'
+  )
 
   console.debug('MobileNav render:', {
-    isPlaying,
-    shouldHideVoiceInfo: isPlaying
+    hasAudioContent,
+    shouldHideVoiceInfo: hasAudioContent
   })
 
   return (
@@ -77,7 +83,7 @@ export function MobileNav() {
           </div>
         </div>
       </nav>
-      {!isPlaying && (
+      {!hasAudioContent && (
         <div className="border-b bg-muted/50">
           <div className="container flex h-10 items-center">
             <VoiceInfo />
