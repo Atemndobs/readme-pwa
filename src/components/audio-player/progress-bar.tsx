@@ -52,53 +52,89 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
   const currentSegmentAudio = currentItem.segments[currentSegment]?.audio
 
   const handleSeek = (value: number[]) => {
+    console.log('[PROGRESS_BAR] Seeking to:', {
+      value,
+      segmentIndex: Math.floor(value[0])
+    });
     onSeek(Math.floor(value[0]))
   }
 
   const handleMarkerClick = (index: number) => {
-    onSeek(index)
+    console.log('[PROGRESS_BAR] Marker clicked:', {
+      currentIndex: index,
+      totalSegments,
+      currentSegment,
+      hasAudio: !!currentItem?.segments[index]?.audio
+    })
+    
+    if (currentItem?.segments[index]?.audio) {
+      onSeek(index)
+    }
   }
 
   // Format time in MM:SS format
   const formatTime = (time: number) => {
+    console.log('[PROGRESS_BAR] Formatting time:', {
+      input: time,
+      isValid: !isNaN(time) && time !== null
+    });
     if (!time || isNaN(time)) return '0:00'
     const minutes = Math.floor(time / 60)
     const seconds = Math.floor(time % 60)
     return `${minutes}:${seconds.toString().padStart(2, '0')}`
   }
 
-  // Calculate current segment elapsed time
-  const calculateCurrentSegmentElapsed = () => {
-    if (!currentSegmentAudio || !currentTime) return 0
-    return currentTime
-  }
-
-  // Calculate total remaining time across all segments
-  const calculateTotalRemainingTime = () => {
-    if (!currentItem) return 0
-    let remainingTime = 0
+  // Calculate total elapsed time across all segments
+  const calculateTotalElapsed = () => {
+    if (!currentItem) return 0;
+    let elapsed = 0;
     
-    // Get current segment's remaining time
-    if (currentSegmentAudio) {
-      remainingTime += Math.max(0, currentSegmentAudio.duration - (currentTime || 0))
-    }
-    
-    // Add duration of remaining segments
-    for (let i = currentSegment + 1; i < currentItem.segments.length; i++) {
-      const segment = currentItem.segments[i]
+    // Add duration of completed segments
+    for (let i = 0; i < currentSegment; i++) {
+      const segment = currentItem.segments[i];
       if (segment.audio?.duration) {
-        remainingTime += segment.audio.duration
+        elapsed += segment.audio.duration;
       }
     }
     
-    return remainingTime
-  }
+    // Add current segment's elapsed time
+    if (currentSegmentAudio && currentTime) {
+      elapsed += currentTime;
+    }
+    
+    return elapsed;
+  };
 
-  // Calculate current progress percentage
+  // Calculate total duration of all segments
+  const calculateTotalDuration = () => {
+    if (!currentItem) return 0;
+    return currentItem.segments.reduce((total, segment) => {
+      return total + (segment.audio?.duration || 0);
+    }, 0);
+  };
+
+  // Calculate overall progress for the slider
   const calculateProgress = () => {
-    if (!currentSegmentAudio?.duration || !currentTime) return 0
-    return (currentTime / currentSegmentAudio.duration) * 100
-  }
+    const totalDuration = calculateTotalDuration();
+    const totalElapsed = calculateTotalElapsed();
+    
+    console.log('[PROGRESS_BAR] Progress calculation:', {
+      currentTime,
+      duration,
+      currentSegment: currentSegment + 1,
+      totalSegments,
+      totalElapsed,
+      totalDuration,
+      segments: currentItem?.segments.map(s => ({
+        duration: s.audio?.duration,
+        status: s.status
+      }))
+    });
+
+    // Calculate progress based on total elapsed time across all segments
+    const progress = totalDuration > 0 ? (totalElapsed / totalDuration) * 100 : 0;
+    return Math.min(100, Math.max(0, progress));
+  };
 
   return (
     <div className="w-full space-y-2">
@@ -110,11 +146,19 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
           step={0.1}
           value={[calculateProgress()]}
           onValueChange={value => {
-            if (!currentSegmentAudio?.duration) return
-            const targetTime = (value[0] / 100) * currentSegmentAudio.duration
-            if (currentSegmentAudio) {
-              currentSegmentAudio.currentTime = targetTime
-            }
+            if (!currentItem || !currentItem.segments[currentSegment]?.audio) return;
+            
+            const audio = currentItem.segments[currentSegment].audio!;
+            const targetTime = (value[0] / 100) * audio.duration;
+            
+            console.log('[PROGRESS_BAR] Seeking:', { 
+              targetTime, 
+              percentage: value[0],
+              currentSegment,
+              duration: audio.duration
+            });
+            
+            audio.currentTime = targetTime;
           }}
           className="w-full"
         />
@@ -142,12 +186,12 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
       {/* Progress info */}
       <div className="flex justify-between text-xs text-muted-foreground">
         <div className="flex gap-4">
-          <span>{formatTime(calculateCurrentSegmentElapsed())}</span>
+          <span>{formatTime(calculateTotalElapsed())}</span>
           <span>Part {currentSegment + 1} of {totalSegments}</span>
         </div>
         <div className="flex gap-4">
           <span>{currentItem.segments[currentSegment]?.type || 'Text'}</span>
-          <span>-{formatTime(calculateTotalRemainingTime())}</span>
+          <span>-{formatTime(calculateTotalDuration() - calculateTotalElapsed())}</span>
         </div>
       </div>
     </div>
