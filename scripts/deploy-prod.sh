@@ -51,11 +51,13 @@ echo -e "${GREEN}New version: ${NEW_VERSION}${NC}"
 # Update version file and changelog
 echo -e "${GREEN}Updating version files...${NC}"
 
-# Ensure directories exist
+# Ensure directories exist in both local and production
 mkdir -p src/utils
+mkdir -p ${APP_DIR}/src/utils
 
-# Update version file
+# Update version file in both locations
 echo "export const APP_VERSION = '${NEW_VERSION}';" > src/utils/version.ts
+cp src/utils/version.ts ${APP_DIR}/src/utils/version.ts
 
 # Get the latest git log message for changelog
 LATEST_CHANGES=$(git log -1 --pretty=%B | sed 's/["\]/\\&/g' | tr '\n' ' ')
@@ -95,6 +97,14 @@ export const getVersionInfo = (version: string): VersionInfo | undefined => {
 export const getCurrentVersion = () => APP_VERSION
 export const getPreviousVersionInfo = () => CHANGELOG['${CURRENT_VERSION}']
 EOL
+
+# Copy changelog to production directory
+cp src/utils/changelog.ts ${APP_DIR}/src/utils/changelog.ts
+
+# Ensure version files are committed in production directory
+cd ${APP_DIR}
+git add src/utils/version.ts src/utils/changelog.ts
+git commit -m "chore: Update version to ${NEW_VERSION}" || true
 
 # Build production image locally
 echo -e "${GREEN}Building production Docker image...${NC}"
