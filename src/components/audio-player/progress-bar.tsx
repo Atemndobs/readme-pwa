@@ -10,8 +10,40 @@ export function ProgressBar({ onSeek }: ProgressBarProps) {
   const { queue, currentIndex, currentTime, duration } = useAudioQueue()
   const currentItem = currentIndex !== null ? queue[currentIndex] : null
 
-  // Show progress bar for playing and paused states
-  if (!currentItem || !['playing', 'paused'].includes(currentItem.status)) {
+  console.log('[PROGRESS_BAR] Component Debug:', {
+    hasQueue: queue.length > 0,
+    currentIndex,
+    hasCurrentItem: !!currentItem,
+    status: currentItem?.status,
+    totalSegments: currentItem?.totalSegments,
+    currentSegment: currentItem?.currentSegment,
+    currentTime,
+    duration,
+    renderConditions: {
+      hasCurrentItem: !!currentItem,
+      hasValidStatus: currentItem && ['playing', 'paused', 'ready', 'partial'].includes(currentItem.status),
+      hasAudioData: currentItem?.segments.some(s => (s.audio?.duration ?? 0) > 0),
+      hasCurrentTime: !!currentTime,
+      hasDuration: !!duration
+    },
+    segments: currentItem?.segments.map(s => ({
+      type: s.type,
+      duration: s.audio?.duration ?? 0,
+      status: s.status,
+      hasAudio: !!s.audio,
+      text: s.text?.slice(0, 50) // first 50 chars
+    }))
+  })
+
+  // Show progress bar for playing, paused, ready and partial states
+  if (!currentItem || !['playing', 'paused', 'ready', 'partial'].includes(currentItem.status)) {
+    console.log('[PROGRESS_BAR] Early return:', {
+      reason: !currentItem ? 'no current item' : 'status not allowed',
+      currentStatus: currentItem?.status,
+      allowedStatuses: ['playing', 'paused', 'ready', 'partial'],
+      currentTime,
+      duration
+    })
     return null
   }
 

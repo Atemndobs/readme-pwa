@@ -116,59 +116,6 @@ export function VoiceSelector() {
           </span>
         </Button>
       </div>
-
-      <div className="w-full">
-        <Tabs 
-          defaultValue={activeTab} 
-          value={activeTab as string} 
-          onValueChange={(value) => setActiveTab(value as "url" | "text")}
-        >
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="text">Text</TabsTrigger>
-            <TabsTrigger value="url">URL</TabsTrigger>
-          </TabsList>
-          <TabsContent value="text" className="mt-2">
-            <div className="relative">
-              <Textarea
-                placeholder="Enter text to convert to speech..."
-                className="min-h-[100px] resize-none"
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-              />
-              {textInput && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute top-2 right-2 h-6 w-6 hover:bg-transparent"
-                  onClick={clearTextInput}
-                >
-                  <XIcon className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </TabsContent>
-          <TabsContent value="url" className="mt-2">
-            <div className="relative">
-              <Input
-                type="url"
-                placeholder="Enter URL to extract text from..."
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
-              />
-              {urlInput && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute top-2 right-2 h-6 w-6 hover:bg-transparent"
-                  onClick={clearUrlInput}
-                >
-                  <XIcon className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </TabsContent>
-        </Tabs>
-      </div>
     </div>
   )
 }

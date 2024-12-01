@@ -1,0 +1,68 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Debug Environment
+        run: |
+          echo "Node version:"
+          node --version
+          echo "NPM version:"
+          npm --version
+          echo "Current directory:"
+          pwd
+          echo "Directory contents:"
+          ls -la
+
+      - name: Install dependencies
+        run: |
+          echo "Installing dependencies..."
+          npm ci
+          echo "Installed dependencies successfully"
+          echo "node_modules contents:"
+          ls -la node_modules | head -n 5
+
+      - name: Run linting
+        run: |
+          echo "Running linting..."
+          npm run lint
+        continue-on-error: true
+
+      - name: Run type checking
+        run: |
+          echo "Running type checking..."
+          npm run typecheck
+        continue-on-error: false
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Deploy to production server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USERNAME }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /home/atem/docker/readme-pwa
+            chmod +x scripts/deploy-prod.sh
+            ./scripts/deploy-prod.sh

@@ -7,6 +7,7 @@ import { VoiceSelector } from './voice-selector'
 import { VoiceInfo } from './voice-info'
 import { Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useAudioQueue } from '@/lib/store/audio-queue'
 import {
   Sheet,
   SheetContent,
@@ -21,6 +22,26 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getStorageStats } from '@/lib/utils/storage'
 
 export function MobileNav() {
+  const { queue } = useAudioQueue()
+
+  const isProcessing = queue.some(item => 
+    item.status === 'loading' || 
+    item.status === 'playing' ||
+    item.status === 'converting' ||
+    item.status === 'partial'
+  )
+
+  const hasAudioContent = queue.some(item => 
+    item.status === 'ready' || 
+    item.status === 'playing' || 
+    item.status === 'paused'
+  )
+
+  console.debug('MobileNav render:', {
+    hasAudioContent,
+    shouldHideVoiceInfo: hasAudioContent || isProcessing
+  })
+
   return (
     <>
       <nav className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -69,11 +90,13 @@ export function MobileNav() {
           </div>
         </div>
       </nav>
-      <div className="border-b bg-muted/50">
-        <div className="container flex h-10 items-center">
-          <VoiceInfo />
+      {(!hasAudioContent && !isProcessing) && (
+        <div className="border-b bg-muted/50">
+          <div className="container flex h-10 items-center">
+            <VoiceInfo />
+          </div>
         </div>
-      </div>
+      )}
     </>
   )
 }

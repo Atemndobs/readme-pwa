@@ -40,10 +40,71 @@ if ! git pull origin main; then
 fi
 
 # Get current version and calculate new version
-CURRENT_VERSION=$(get_current_version)
-NEW_VERSION=$(increment_version $CURRENT_VERSION)
+CURRENT_VERSION=$(grep -oP "image: ${APP_NAME}:\K[0-9]+\.[0-9]+\.[0-9]+" docker-compose.yml || echo "1.0.0")
+MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
+MINOR=$(echo $CURRENT_VERSION | cut -d. -f2)
+PATCH=$(echo $CURRENT_VERSION | cut -d. -f3)
+NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
 echo -e "${GREEN}Current version: ${CURRENT_VERSION}${NC}"
 echo -e "${GREEN}New version: ${NEW_VERSION}${NC}"
+
+# Update version file and changelog
+echo -e "${GREEN}Updating version files...${NC}"
+
+# Ensure directories exist in both local and production
+mkdir -p src/utils
+mkdir -p ${APP_DIR}/src/utils
+
+# Update version file in both locations
+echo "export const APP_VERSION = '${NEW_VERSION}';" > src/utils/version.ts
+cp src/utils/version.ts ${APP_DIR}/src/utils/version.ts
+
+# Get the latest git log message for changelog
+LATEST_CHANGES=$(git log -1 --pretty=%B | sed 's/["\]/\\&/g' | tr '\n' ' ')
+TODAY_DATE=$(date +%Y-%m-%d)
+
+# Create new changelog entry
+cat > src/utils/changelog.ts << EOL
+import { APP_VERSION } from './version'
+
+export type VersionInfo = {
+  version: string
+  date: string
+  changes: string[]
+}
+
+export const CHANGELOG: Record<string, VersionInfo> = {
+  [APP_VERSION]: {
+    version: APP_VERSION,
+    date: '${TODAY_DATE}',
+    changes: [
+      '${LATEST_CHANGES}'
+    ]
+  },
+  ['${CURRENT_VERSION}']: {
+    version: '${CURRENT_VERSION}',
+    date: '${TODAY_DATE}',
+    changes: [
+      'Previous stable version'
+    ]
+  }
+}
+
+export const getVersionInfo = (version: string): VersionInfo | undefined => {
+  return CHANGELOG[version]
+}
+
+export const getCurrentVersion = () => APP_VERSION
+export const getPreviousVersionInfo = () => CHANGELOG['${CURRENT_VERSION}']
+EOL
+
+# Copy changelog to production directory
+cp src/utils/changelog.ts ${APP_DIR}/src/utils/changelog.ts
+
+# Ensure version files are committed in production directory
+cd ${APP_DIR}
+git add src/utils/version.ts src/utils/changelog.ts
+git commit -m "chore: Update version to ${NEW_VERSION}" || true
 
 # Build production image locally
 echo -e "${GREEN}Building production Docker image...${NC}"
@@ -59,10 +120,21 @@ docker buildx build \
 echo -e "${GREEN}Updating docker-compose.yml...${NC}"
 sed -i "s/${APP_NAME}:${CURRENT_VERSION}/${APP_NAME}:${NEW_VERSION}/" ${APP_DIR}/docker-compose.yml
 
+# Stop and remove existing container, volumes, and images
+echo -e "${GREEN}Performing complete cleanup...${NC}"
+cd ${APP_DIR}
+
+# Stop and remove all containers, volumes, and images
+echo -e "${GREEN}Stopping and removing all containers and volumes...${NC}"
+docker-compose down -v --rmi all || true
+
+# Clean up all unused containers, networks, images without asking for confirmation
+echo -e "${GREEN}Cleaning up unused Docker resources...${NC}"
+docker system prune -af || true
+
 # Deploy with docker-compose
 echo -e "${GREEN}Deploying new version...${NC}"
-cd ${APP_DIR}
-docker-compose up -d
+docker-compose up -d --force-recreate
 
 # Check container health
 echo -e "${GREEN}Checking container health...${NC}"

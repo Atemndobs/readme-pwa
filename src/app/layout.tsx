@@ -2,6 +2,7 @@ import './globals.css'
 import type { Metadata, Viewport } from 'next'
 import { inter } from './fonts'
 import RootLayoutClient from './root-layout-client'
+import { VersionDisplay } from '@/components/version-display'
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -50,6 +51,7 @@ export default function RootLayout({
         <RootLayoutClient>
           {children}
         </RootLayoutClient>
+        <VersionDisplay />
       </body>
     </html>
   )
