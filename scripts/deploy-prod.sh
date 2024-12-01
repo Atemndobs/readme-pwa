@@ -110,14 +110,20 @@ docker buildx build \
 echo -e "${GREEN}Updating docker-compose.yml...${NC}"
 sed -i "s/${APP_NAME}:${CURRENT_VERSION}/${APP_NAME}:${NEW_VERSION}/" ${APP_DIR}/docker-compose.yml
 
-# Stop and remove existing container
-echo -e "${GREEN}Cleaning up existing containers...${NC}"
-docker stop ${APP_NAME} || true
-docker rm ${APP_NAME} || true
+# Stop and remove existing container, volumes, and images
+echo -e "${GREEN}Performing complete cleanup...${NC}"
+cd ${APP_DIR}
+
+# Stop and remove all containers, volumes, and images
+echo -e "${GREEN}Stopping and removing all containers and volumes...${NC}"
+docker-compose down -v --rmi all || true
+
+# Clean up all unused containers, networks, images without asking for confirmation
+echo -e "${GREEN}Cleaning up unused Docker resources...${NC}"
+docker system prune -af || true
 
 # Deploy with docker-compose
 echo -e "${GREEN}Deploying new version...${NC}"
-cd ${APP_DIR}
 docker-compose up -d --force-recreate
 
 # Check container health
