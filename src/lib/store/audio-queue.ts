@@ -255,11 +255,11 @@ export const useAudioQueue = create<AudioQueueStore>()(
                         ...item,
                         segments: item.segments.map((segment, index) =>
                           index === i
-                            ? { ...segment, status: 'error', error: error.message }
+                            ? { ...segment, status: 'error', error: error instanceof Error ? error.message : 'Unknown error' }
                             : segment
                         ),
                         status: 'error',
-                        error: `Failed to load audio for segment ${i + 1}: ${error.message}`
+                        error: `Failed to load audio for segment ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`
                       }
                     : item
                 )
@@ -890,11 +890,11 @@ export const useAudioQueue = create<AudioQueueStore>()(
                           ...item,
                           segments: item.segments.map((segment, index) =>
                             index === i
-                              ? { ...segment, status: 'error', error: error.message }
+                              ? { ...segment, status: 'error', error: error instanceof Error ? error.message : 'Unknown error' }
                               : segment
                           ),
                           status: 'error',
-                          error: `Failed to load audio for segment ${i + 1}: ${error.message}`
+                          error: `Failed to load audio for segment ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`
                         }
                       : item
                   )
