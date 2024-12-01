@@ -99,18 +99,18 @@ export function MiniPlayer() {
   }, [requiresUserInteraction])
 
   // Initialize audio context for iOS when component mounts
-  React.useEffect(() => {
-    if (isIOSSafari()) {
-      handleIOSAudioInit().then(success => {
-        if (!success) {
-          toast("Please tap play to enable audio");
-        }
-      }).catch(error => {
-        console.error('iOS audio init error:', error);
-        toast.error("Audio initialization failed");
-      });
-    }
-  }, []);
+  // React.useEffect(() => {
+  //   if (isIOSSafari()) {
+  //     handleIOSAudioInit().then(success => {
+  //       if (!success) {
+  //         toast("Please tap play to enable audio");
+  //       }
+  //     }).catch(error => {
+  //       console.error('iOS audio init error:', error);
+  //       toast.error("Audio initialization failed");
+  //     });
+  //   }
+  // }, []);
 
   // Handle iOS audio resume on visibility change
   React.useEffect(() => {
@@ -183,29 +183,34 @@ export function MiniPlayer() {
 
   const handlePlay = async () => {
     try {
+      console.log('Play button clicked')
+      
+      // For iOS Safari, try to initialize audio first
       if (isIOSSafari()) {
-        const success = await handleIOSAudioInit()
+        setUserInteraction(true); // Mark that we have user interaction
+        const success = await handleIOSAudioInit();
         if (!success) {
+          console.log('iOS audio init failed, requesting another tap');
           toast("Tap again to start audio");
-          return
+          return;
         }
-
-        setUserInteraction(true)
       }
 
       if (isPlaying) {
-        pause()
-        return
+        await pause()
+      } else {
+        await play()
       }
-
-      await play()
     } catch (error) {
       console.error('Play error:', error)
       
       // Handle iOS interaction requirement
-      if (error instanceof Error && error.message.includes('iOS requires user interaction')) {
+      if (error instanceof Error && 
+          (error.message.includes('iOS requires user interaction') || 
+           error.message.includes('play() failed'))) {
+        console.log('iOS requires another user interaction');
         toast("Tap again to start audio");
-        return // Don't show error toast
+        return;
       }
       
       toast.error("Failed to play audio");
