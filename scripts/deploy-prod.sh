@@ -55,9 +55,18 @@ echo -e "${GREEN}Updating version files...${NC}"
 mkdir -p src/utils
 mkdir -p ${APP_DIR}/src/utils
 
-# Update version file in both locations
-echo "export const APP_VERSION = '${NEW_VERSION}';" > src/utils/version.ts
-cp src/utils/version.ts ${APP_DIR}/src/utils/version.ts
+# Update version file
+echo "// This file is automatically updated during deployment
+export const APP_VERSION = '${NEW_VERSION}';" > src/utils/version.ts
+
+# Update docker-compose.yml with new version
+sed -i.bak "s/${APP_NAME}:${CURRENT_VERSION}/${APP_NAME}:${NEW_VERSION}/" docker-compose.yml
+rm -f docker-compose.yml.bak
+
+# Copy files to production directory if different
+if [ "$(realpath .)" != "$(realpath ${APP_DIR})" ]; then
+    cp -r . ${APP_DIR}/
+fi
 
 # Get the latest git log message for changelog
 LATEST_CHANGES=$(git log -1 --pretty=%B | sed 's/["\]/\\&/g' | tr '\n' ' ')
@@ -115,10 +124,6 @@ docker buildx build \
   -t $APP_NAME:$NEW_VERSION \
   --load \
   ${APP_DIR}
-
-# Update docker-compose.yml with new version
-echo -e "${GREEN}Updating docker-compose.yml...${NC}"
-sed -i "s/${APP_NAME}:${CURRENT_VERSION}/${APP_NAME}:${NEW_VERSION}/" ${APP_DIR}/docker-compose.yml
 
 # Stop and remove existing container, volumes, and images
 echo -e "${GREEN}Performing complete cleanup...${NC}"
