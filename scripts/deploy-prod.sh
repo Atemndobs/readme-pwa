@@ -48,25 +48,15 @@ NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
 echo -e "${GREEN}Current version: ${CURRENT_VERSION}${NC}"
 echo -e "${GREEN}New version: ${NEW_VERSION}${NC}"
 
-# Update version file and changelog
+# Update version files
 echo -e "${GREEN}Updating version files...${NC}"
 
-# Ensure directories exist in both local and production
+# Create required directories
 mkdir -p src/utils
-mkdir -p ${APP_DIR}/src/utils
 
 # Update version file
 echo "// This file is automatically updated during deployment
 export const APP_VERSION = '${NEW_VERSION}';" > src/utils/version.ts
-
-# Update docker-compose.yml with new version
-sed -i.bak "s/${APP_NAME}:${CURRENT_VERSION}/${APP_NAME}:${NEW_VERSION}/" docker-compose.yml
-rm -f docker-compose.yml.bak
-
-# Copy files to production directory if different
-if [ "$(realpath .)" != "$(realpath ${APP_DIR})" ]; then
-    cp -r . ${APP_DIR}/
-fi
 
 # Get the latest git log message for changelog
 LATEST_CHANGES=$(git log -1 --pretty=%B | sed 's/["\]/\\&/g' | tr '\n' ' ')
@@ -107,11 +97,25 @@ export const getCurrentVersion = () => APP_VERSION
 export const getPreviousVersionInfo = () => CHANGELOG['${CURRENT_VERSION}']
 EOL
 
-# Copy changelog to production directory
-cp src/utils/changelog.ts ${APP_DIR}/src/utils/changelog.ts
+# Update docker-compose.yml with new version
+sed -i.bak "s/${APP_NAME}:${CURRENT_VERSION}/${APP_NAME}:${NEW_VERSION}/" docker-compose.yml
+rm -f docker-compose.yml.bak
+
+# If we're not in the production directory, copy everything over
+if [ "$(realpath .)" != "$(realpath ${APP_DIR})" ]; then
+    echo -e "${GREEN}Copying files to production directory...${NC}"
+    mkdir -p ${APP_DIR}
+    rsync -av --delete \
+        --exclude '.git' \
+        --exclude 'node_modules' \
+        --exclude '.next' \
+        . ${APP_DIR}/
+fi
+
+# Change to production directory for remaining operations
+cd ${APP_DIR}
 
 # Ensure version files are committed in production directory
-cd ${APP_DIR}
 git add src/utils/version.ts src/utils/changelog.ts
 git commit -m "chore: Update version to ${NEW_VERSION}" || true
 
@@ -127,7 +131,6 @@ docker buildx build \
 
 # Stop and remove existing container, volumes, and images
 echo -e "${GREEN}Performing complete cleanup...${NC}"
-cd ${APP_DIR}
 
 # Stop and remove all containers, volumes, and images
 echo -e "${GREEN}Stopping and removing all containers and volumes...${NC}"
