@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { useAudioQueue } from '@/lib/store/audio-queue'
 import { useSettings } from '@/lib/store/settings'
 import { MiniPlayer } from '@/components/audio-player/mini-player'
@@ -139,7 +138,7 @@ export default function Home() {
         onValueChange={(value) => setActiveTab(value as "url" | "text")} 
         className="w-full"
       >
-        {!isPlaying && (
+        {!hasAudioContent && (
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="url">URL</TabsTrigger>
             <TabsTrigger value="text">Text</TabsTrigger>
@@ -184,7 +183,7 @@ export default function Home() {
         </TabsContent>
 
         <TabsContent value="text" className="space-y-4">
-          {textInput.trim() && !isPlaying && (
+          {textInput.trim() && !hasAudioContent && (
             <Button 
               onClick={handleSubmit}
               disabled={isProcessing || isConverting}
@@ -254,7 +253,7 @@ export default function Home() {
               <div
                 ref={contentEditableRef}
                 contentEditable
-                className="min-h-[200px] max-h-[calc(100vh-300px)] w-full rounded-md border border-input bg-background px-3 pt-10 pb-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 overflow-y-auto relative"
+                className="min-h-[20px] max-h-[calc(100vh-400px)] w-full rounded-md border border-input bg-background px-3 pt-10 pb-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 overflow-y-auto relative"
                 onPaste={(e) => {
                   e.preventDefault()
                   const text = e.clipboardData.getData('text/html') || e.clipboardData.getData('text')
