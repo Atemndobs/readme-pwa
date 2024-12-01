@@ -335,6 +335,58 @@ export default function Home() {
                 dangerouslySetInnerHTML={{ __html: textInput }}
               />
               <div className="absolute right-2 top-2 flex gap-2 bg-background/80 backdrop-blur-sm p-1 rounded-md z-10">
+                {!textInput && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 hover:bg-transparent"
+                    onClick={async () => {
+                      try {
+                        const clipboardItems = await navigator.clipboard.read();
+                        for (const item of clipboardItems) {
+                          // Try to get HTML content first
+                          if (item.types.includes('text/html')) {
+                            const htmlBlob = await item.getType('text/html');
+                            const htmlText = await htmlBlob.text();
+                            if (contentEditableRef.current) {
+                              contentEditableRef.current.innerHTML = htmlText;
+                              setTextInput(contentEditableRef.current.innerHTML);
+                              toast.success('Text pasted from clipboard!');
+                            }
+                            return;
+                          }
+                        }
+                        // Fallback to plain text if HTML is not available
+                        const clipboardText = await navigator.clipboard.readText();
+                        if (clipboardText && contentEditableRef.current) {
+                          contentEditableRef.current.innerHTML = clipboardText;
+                          setTextInput(contentEditableRef.current.innerHTML);
+                          toast.success('Text pasted from clipboard!');
+                        }
+                      } catch (error) {
+                        console.error('Paste error:', error);
+                        toast.error('Failed to paste from clipboard');
+                      }
+                    }}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-4 w-4"
+                    >
+                      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                      <path d="M15 2H9a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1Z" />
+                    </svg>
+                  </Button>
+                )}
                 {textInput && (
                   <>
                     <Button
