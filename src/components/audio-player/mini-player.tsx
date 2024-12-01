@@ -93,10 +93,7 @@ export function MiniPlayer() {
   // Show a toast when user interaction is required (iOS)
   React.useEffect(() => {
     if (requiresUserInteraction) {
-      toast("Tap to Enable Audio", {
-        description: "Please tap the play button to enable audio playback",
-        duration: 5000,
-      })
+      toast("Please tap play to enable audio");
     }
   }, [requiresUserInteraction])
 
@@ -105,70 +102,84 @@ export function MiniPlayer() {
     if (isIOSSafari()) {
       handleIOSAudioInit().then(success => {
         if (!success) {
-          toast("Tap to Enable Audio", {
-            description: "Please tap the play button to enable audio playback",
-            duration: 5000,
-          })
+          toast("Please tap play to enable audio");
         }
+      }).catch(error => {
+        console.error('iOS audio init error:', error);
+        toast.error("Audio initialization failed");
       });
     }
   }, []);
 
+  // Handle iOS audio resume on visibility change
+  React.useEffect(() => {
+    if (!isIOSSafari()) return
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isPlaying) {
+        handleIOSAudioInit().catch(console.error)
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [isPlaying])
+
   // Detect touch device on mount
   useEffect(() => {
-    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
-  }, []);
+    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0)
+  }, [])
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStartY(e.touches[0].clientY);
-    setInitialVolume(volume);
-  };
+    setTouchStartY(e.touches[0].clientY)
+    setInitialVolume(volume)
+  }
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    e.preventDefault();
-    if (touchStartY === null) return;
+    e.preventDefault()
+    if (touchStartY === null) return
 
-    const touchDelta = (touchStartY - e.touches[0].clientY) * 0.005;
-    const newVolume = Math.max(0, Math.min(1, initialVolume + touchDelta));
-    setVolume(newVolume);
-  };
+    const touchDelta = (touchStartY - e.touches[0].clientY) * 0.005
+    const newVolume = Math.max(0, Math.min(1, initialVolume + touchDelta))
+    setVolume(newVolume)
+  }
 
   const handleTouchEnd = () => {
-    setTouchStartY(null);
-  };
-
-  if (!hasItems && !isConverting) {
-    console.log('MiniPlayer hidden: no items and not converting')
-    return null
+    setTouchStartY(null)
   }
 
   const handlePlay = async () => {
     try {
       if (isIOSSafari()) {
-        setUserInteraction(true);
+        const success = await handleIOSAudioInit()
+        if (!success) {
+          toast("Tap again to start audio");
+          return
+        }
+
+        setUserInteraction(true)
       }
 
       if (isPlaying) {
-        pause();
-        return;
+        pause()
+        return
       }
 
-      await play();
+      await play()
     } catch (error) {
-      console.error('Play error:', error);
+      console.error('Play error:', error)
       
       // Handle iOS interaction requirement
       if (error instanceof Error && error.message.includes('iOS requires user interaction')) {
-        toast("Tap Again", {
-          description: "Please tap play again to start audio",
-          duration: 3000,
-        });
-        return; // Don't show error toast
+        toast("Tap again to start audio");
+        return // Don't show error toast
       }
       
       toast.error("Failed to play audio");
     }
-  };
+  }
 
   const handleNext = async () => {
     try {
@@ -178,7 +189,7 @@ export function MiniPlayer() {
       await next()
     } catch (error) {
       console.error('Next track error:', error)
-      toast.error("Failed to play next track")
+      toast.error("Failed to play next track");
     }
   }
 
@@ -190,20 +201,20 @@ export function MiniPlayer() {
       await previous()
     } catch (error) {
       console.error('Previous track error:', error)
-      toast.error("Failed to play previous track")
+      toast.error("Failed to play previous track");
     }
   }
 
   const handleClearQueue = () => {
     console.log('Clearing queue')
     clear()
-    toast.success("Queue cleared")
+    toast.success("Queue cleared");
   }
 
   const PlayButton = () => {
-    const needsInteraction = isIOSSafari() && requiresUserInteraction;
-    const currentItem = queue[currentIndex ?? 0];
-    const isConverting = currentItem?.status === 'converting';
+    const needsInteraction = isIOSSafari() && requiresUserInteraction
+    const currentItem = queue[currentIndex ?? 0]
+    const isConverting = currentItem?.status === 'converting'
     
     return (
       <Button
@@ -232,8 +243,13 @@ export function MiniPlayer() {
           </>
         )}
       </Button>
-    );
-  };
+    )
+  }
+
+  if (!hasItems && !isConverting) {
+    console.log('MiniPlayer hidden: no items and not converting')
+    return null
+  }
 
   return (
     <Card className="fixed bottom-0 left-0 right-0 z-50 w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -328,7 +344,7 @@ export function MiniPlayer() {
                 className="h-6 w-6 hover:bg-red-100 hover:text-red-600"
                 onClick={() => {
                   cancelConversion()
-                  toast.success("Conversion cancelled")
+                  toast.success("Conversion cancelled");
                 }}
               >
                 <X className="h-4 w-4" />
@@ -377,7 +393,7 @@ export function MiniPlayer() {
                   await play(currentItem.id, segmentIndex)
                 } catch (error) {
                   console.error('Seek error:', error)
-                  toast.error("Failed to seek to position")
+                  toast.error("Failed to seek to position");
                 }
               }} />
             </div>

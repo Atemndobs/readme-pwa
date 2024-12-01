@@ -18,7 +18,13 @@ export default function RootLayoutClient({
     >
       <ClientInit />
       {children}
-      <Toaster position="top-center" />
+      <Toaster 
+        position="top-center" 
+        duration={2000}
+        closeButton
+        richColors
+        dismissible
+      />
     </ThemeProvider>
   )
 }
