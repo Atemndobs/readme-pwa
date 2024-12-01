@@ -59,7 +59,9 @@ export default function Home() {
   // Check if any item in the queue is currently loading or playing
   const isProcessing = queue.some(item => 
     item.status === 'loading' || 
-    item.status === 'playing'
+    item.status === 'playing' ||
+    item.status === 'converting' ||
+    item.status === 'partial'
   )
 
   // Check if we have any ready or playing items
@@ -71,8 +73,13 @@ export default function Home() {
 
   console.debug('Page render:', {
     isPlaying,
-    shouldHideTabs: isPlaying,
-    queueStatus: queue.map(item => item.status)
+    isProcessing,
+    hasAudioContent,
+    queueStatus: queue.map(item => ({ 
+      id: item.id,
+      status: item.status,
+      segments: item.segments.map(s => s.status)
+    }))
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -117,6 +124,7 @@ export default function Home() {
       }
       
       console.log('4. Starting text-to-speech conversion...')
+      setIsConverting(true)
       await add(content.text, voice, urlInput)
       console.log('5. Text-to-speech conversion completed')
       
@@ -126,6 +134,7 @@ export default function Home() {
       toast.error(error instanceof Error ? error.message : 'Failed to process URL content')
     } finally {
       setIsLoading(false)
+      setIsConverting(false)
     }
   }
 
@@ -138,7 +147,7 @@ export default function Home() {
         onValueChange={(value) => setActiveTab(value as "url" | "text")} 
         className="w-full"
       >
-        {!hasAudioContent && (
+        {(!hasAudioContent && !isProcessing) && (
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="url">URL</TabsTrigger>
             <TabsTrigger value="text">Text</TabsTrigger>
@@ -170,13 +179,69 @@ export default function Home() {
                 )}
               </div>
             </div>
-            {urlInput.trim() && (
+            {urlInput.trim() && !hasAudioContent && (
               <Button 
                 type="submit" 
-                disabled={isLoading || isProcessing}
-                className="w-full"
+                disabled={!isConverting && isProcessing}
+                className="w-full relative h-10 overflow-hidden"
               >
-                {isLoading ? 'Fetching...' : 'Fetch Content'}
+                {isConverting ? (
+                  <div className="flex items-center justify-center gap-3">
+                    <div className="speaker-container flex items-center gap-1 w-24">
+                      <div className="speaker">
+                        <style jsx>{`
+                          .speaker {
+                            font-size: 1.5rem;
+                            transform: scaleX(1);
+                          }
+                          @keyframes soundWave {
+                            0% {
+                              opacity: 0;
+                              transform: translateX(-10px);
+                            }
+                            20% {
+                              opacity: 1;
+                            }
+                            100% {
+                              opacity: 0;
+                              transform: translateX(15px);
+                            }
+                          }
+                          .sound-wave {
+                            display: inline-flex;
+                            gap: 2px;
+                            margin-left: 4px;
+                          }
+                          .wave {
+                            width: 3px;
+                            height: 3px;
+                            background-color: currentColor;
+                            border-radius: 50%;
+                            animation: soundWave 1.5s infinite;
+                            opacity: 0;
+                          }
+                          .wave:nth-child(2) {
+                            animation-delay: 0.2s;
+                          }
+                          .wave:nth-child(3) {
+                            animation-delay: 0.4s;
+                          }
+                        `}</style>
+                        🔊
+                        <div className="sound-wave inline-flex">
+                          <div className="wave" />
+                          <div className="wave" />
+                          <div className="wave" />
+                        </div>
+                      </div>
+                    </div>
+                    <span className="inline-block min-w-[200px] text-center transition-opacity duration-200">
+                      {statusMessages[conversionStatus]}
+                    </span>
+                  </div>
+                ) : (
+                  isLoading ? 'Fetching...' : 'Fetch Content'
+                )}
               </Button>
             )}
           </form>
@@ -186,7 +251,7 @@ export default function Home() {
           {textInput.trim() && !hasAudioContent && (
             <Button 
               onClick={handleSubmit}
-              disabled={isProcessing || isConverting}
+              disabled={isConverting || (!isConverting && isProcessing)}
               className="w-full relative h-10 overflow-hidden"
             >
               {isConverting ? (
