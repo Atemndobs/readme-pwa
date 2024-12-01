@@ -21,9 +21,8 @@ export default function RootLayoutClient({
       <Toaster 
         position="top-center" 
         duration={2000}
-        closeButton
-        richColors
-        dismissible
+        closeButton={true}
+        richColors={true}
       />
     </ThemeProvider>
   )

@@ -43,7 +43,8 @@ export function MiniPlayer() {
     setVolume,
     muted,
     toggleMute,
-    requiresUserInteraction
+    requiresUserInteraction,
+    updateTime
   } = useAudioQueue()
 
   const [showVolumeSlider, setShowVolumeSlider] = React.useState(false)
@@ -131,6 +132,36 @@ export function MiniPlayer() {
   useEffect(() => {
     setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0)
   }, [])
+
+  // Update current time when audio is playing
+  React.useEffect(() => {
+    if (!currentItem?.segments[currentItem.currentSegment]?.audio) return;
+    
+    const audio = currentItem.segments[currentItem.currentSegment].audio!;
+    
+    const handleTimeUpdate = () => {
+      console.log('[MINI_PLAYER] Time update:', {
+        currentTime: audio.currentTime,
+        duration: audio.duration,
+        segment: currentItem.currentSegment + 1,
+        totalSegments: currentItem.totalSegments
+      });
+      
+      // Update time in store using the updateTime function
+      updateTime(audio.currentTime, audio.duration);
+    };
+    
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    
+    // Initial update
+    if (audio.duration) {
+      updateTime(audio.currentTime, audio.duration);
+    }
+    
+    return () => {
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+    };
+  }, [currentItem?.id, currentItem?.currentSegment, updateTime]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     setTouchStartY(e.touches[0].clientY)
