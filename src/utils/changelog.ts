@@ -17,17 +17,22 @@ export const CHANGELOG: Record<string, VersionInfo> = {
     version: APP_VERSION,
     date: new Date().toISOString().split('T')[0],
     changes: [
-      'Feature: Add version tracking and changelog',
-      'Improve deployment automation',
-      'Add version display component'
+      'Fix: TypeScript error in MobileNav component',
+      'Remove conditional rendering of VoiceSelector',
+      'Update debug logging',
+      'Remove unused text-input component'
     ]
   },
-  '0.9.0': {
-    version: '1.0.0',
-    date: '2024-11-30',
+  '0.1.0': {
+    version: '0.1.0',
+    date: '2024-01-09',
     changes: [
       'Initial release',
-      'Base functionality implemented'
+      'Text-to-speech functionality',
+      'Voice selection',
+      'Audio queue management',
+      'Storage management',
+      'Mobile-friendly navigation'
     ]
   }
 }
