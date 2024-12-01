@@ -343,6 +343,13 @@ export const useAudioQueue = create<AudioQueueStore>()(
       },
 
       clear: async () => {
+        // Stop any playing audio
+        const state = get()
+        if (state.currentAudio) {
+          state.currentAudio.pause()
+          state.currentAudio.currentTime = 0
+        }
+        
         // Clear all audio data from IndexedDB
         await clearAudioData()
         

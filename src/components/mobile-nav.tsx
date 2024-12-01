@@ -24,6 +24,13 @@ import { getStorageStats } from '@/lib/utils/storage'
 export function MobileNav() {
   const { queue } = useAudioQueue()
 
+  const isProcessing = queue.some(item => 
+    item.status === 'loading' || 
+    item.status === 'playing' ||
+    item.status === 'converting' ||
+    item.status === 'partial'
+  )
+
   const hasAudioContent = queue.some(item => 
     item.status === 'ready' || 
     item.status === 'playing' || 
@@ -32,7 +39,7 @@ export function MobileNav() {
 
   console.debug('MobileNav render:', {
     hasAudioContent,
-    shouldHideVoiceInfo: hasAudioContent
+    shouldHideVoiceInfo: hasAudioContent || isProcessing
   })
 
   return (
@@ -83,7 +90,7 @@ export function MobileNav() {
           </div>
         </div>
       </nav>
-      {!hasAudioContent && (
+      {(!hasAudioContent && !isProcessing) && (
         <div className="border-b bg-muted/50">
           <div className="container flex h-10 items-center">
             <VoiceInfo />
