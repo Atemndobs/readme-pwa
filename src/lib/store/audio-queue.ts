@@ -15,7 +15,7 @@ type QueueItemStatus = 'pending' | 'loading' | 'ready' | 'playing' | 'paused' | 
 interface AudioSegment extends TextSegment {
   id: string
   audioUrl: string | null
-  audio: null
+  audio: HTMLAudioElement | null
   status: AudioSegmentStatus
   error?: string
 }
@@ -369,7 +369,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
           }))
         });
 
-        if (currentItem.currentSegment < currentItem.totalSegments - 1) {
+        if (currentItem && currentItem.currentSegment < currentItem.totalSegments - 1) {
           const nextSegment = currentItem.currentSegment + 1;
           
           console.log('[AUDIO_QUEUE] Moving to next segment:', {
@@ -478,10 +478,24 @@ export const useAudioQueue = create<AudioQueueStore>()(
         }
       },
 
+      togglePlayPause: async () => {
+        const state = get(); // Get the current state
+        if (state.isPlaying) {
+            console.log("[AudioQueue] Pausing audio...");
+            toneManager.pause();
+            set(state => ({ ...state, isPlaying: false }));
+        } else {
+            console.log("[AudioQueue] Playing audio...");
+            await toneManager.play(); // Ensure to await play if it's an async function
+            set(state => ({ ...state, isPlaying: true }));
+        }
+    },
+
       play: async (id?: string, segmentIndex?: number) => {
         const state = get();
         let targetId = id;
         let targetSegmentIndex = segmentIndex;
+        
 
         try {
           // Initialize audio context first
@@ -517,7 +531,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
             return;
           }
 
-          console.log('[AudioQueue] Loading audio:', {
+          console.log('[AUDIO_QUEUE] Loading audio:', {
             targetId,
             segmentIndex: targetSegmentIndex,
             audioUrl: segment.audioUrl
@@ -534,7 +548,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
             if (currentState.isPlaying) {
               // Check if there are more segments in the current item
               const currentItem = currentState.queue[queueItemIndex];
-              if (currentItem && targetSegmentIndex < currentItem.totalSegments - 1) {
+              if (currentItem && typeof targetSegmentIndex === 'number' && targetSegmentIndex < currentItem.totalSegments - 1) {
                 console.log('[AudioQueue] Playing next segment');
                 await get().play(targetId, targetSegmentIndex + 1);
               } else {
@@ -586,6 +600,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
       },
 
       pause: () => {
+        console.log("[AudioQueue] Pausing audio...");
         toneManager.pause();
         set(state => ({ ...state, isPlaying: false }));
       },

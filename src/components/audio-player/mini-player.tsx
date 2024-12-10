@@ -110,6 +110,17 @@ export function MiniPlayer({ onClose }: MiniPlayerProps) {
     currentRetries.current = 0
   }, [pause])
 
+  const togglePlayPause = async () => {
+    if (isPlaying) {
+      console.log("[MiniPlayer] Pausing audio...");
+      pause();
+    } else {
+      console.log("[MiniPlayer] Playing audio...");
+      await play(); // Ensure to await if play is async
+    }
+  };
+
+
   // Handle volume changes
   const handleVolumeChange = useCallback((newVolume: number) => {
     setVolume(Math.max(0, Math.min(1, newVolume)))
@@ -278,7 +289,7 @@ export function MiniPlayer({ onClose }: MiniPlayerProps) {
       <Button
         variant="ghost"
         size="icon"
-        onClick={handlePlay}
+        onClick={togglePlayPause} // Update to call togglePlayPause
         className="relative"
         disabled={!currentItem}
       >
@@ -301,7 +312,7 @@ export function MiniPlayer({ onClose }: MiniPlayerProps) {
           </>
         )}
       </Button>
-    )
+    );
   }
 
   if (!hasItems && !isConverting) {
