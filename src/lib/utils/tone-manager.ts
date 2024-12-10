@@ -1,30 +1,58 @@
 import * as Tone from 'tone';
 
-
+/**
+ * ToneAudioManager is a singleton class responsible for managing audio playback using the Tone.js library.
+ * It provides methods for loading audio, playing, pausing, stopping, and seeking audio, as well as setting volume and mute.
+ * It also handles audio context initialization and cleanup.
+ */
 class ToneAudioManager {
-  private player: Tone.Player | null = null;
-  private volume: Tone.Volume = new Tone.Volume(0).toDestination();
+  private player: any = null;
+  private volume: any = null;
   private initialized = false;
   private onEndCallback: (() => void) | null = null;
   private static instance: ToneAudioManager;
   private lastPosition: number = 0; // Store the playback position
 
-  
+  /**
+   * Constructor for ToneAudioManager.
+   * Ensures singleton pattern and initializes Tone.js if in the browser environment.
+   */
   constructor() {
     // Ensure singleton pattern
     if (ToneAudioManager.instance) {
       return ToneAudioManager.instance;
     }
+
+    // Only initialize if we're in the browser
+    if (typeof window !== 'undefined') {
+      this.initializeTone();
+    }
     
-    this.volume = new Tone.Volume(0).toDestination();
-    Tone.context.lookAhead = 0.1; // Reduce latency
     ToneAudioManager.instance = this;
   }
 
+  /**
+   * Initializes Tone.js and sets up the audio context.
+   * This method is only called if we're in the browser environment.
+   */
+  private async initializeTone() {
+    if (this.initialized) return;
+    
+    const Tone = await import('tone');
+    this.volume = new Tone.Volume(0).toDestination();
+    Tone.context.lookAhead = 0.1; // Reduce latency
+    this.initialized = true;
+  }
+
+  /**
+   * Initializes the audio context.
+   * This method is only called if we're in the browser environment.
+   */
   async initializeContext() {
     if (this.initialized) return;
     
     try {
+      const Tone = await import('tone');
       await Tone.start();
       if (Tone.context.state !== 'running') {
         await Tone.context.resume();
@@ -37,38 +65,38 @@ class ToneAudioManager {
     }
   }
 
-  async loadAudio(url: string): Promise<Tone.Player> {
+  /**
+   * Loads audio from the specified URL.
+   * @param url The URL of the audio file to load.
+   * @returns A promise that resolves with the loaded Tone.Player instance.
+   */
+  async loadAudio(url: string): Promise<any> {
     try {
       await this.initializeContext();
       
-      // Stop and cleanup any existing player
+      // Clean up any existing player
       this.stopAndCleanup();
 
+      const Tone = await import('tone');
+      
       return new Promise((resolve, reject) => {
         this.player = new Tone.Player({
           url,
           autostart: false,
           onload: () => {
-            console.log('[ToneManager] Audio loaded successfully');
+            console.log("[ToneManager] Audio loaded successfully");
             if (this.player) {
               this.player.connect(this.volume);
-              
-              // Set up the onEnd callback
-              this.player.onstop = () => {
-                console.log('[ToneManager] Audio playback ended');
-                if (this.onEndCallback) {
-                  this.onEndCallback();
-                }
-              };
-              
               resolve(this.player);
+            } else {
+              reject(new Error("Player is null after loading"));
             }
           },
-          onerror: (error) => {
-            console.error('[ToneManager] Error loading audio:', error);
+          onerror: (error: Error) => {
+            console.error("[ToneManager] Error loading audio:", error);
             reject(error);
           }
-        });
+        }).toDestination();
       });
     } catch (error) {
       console.error('[ToneManager] Error in loadAudio:', error);
@@ -76,6 +104,10 @@ class ToneAudioManager {
     }
   }
   
+  /**
+   * Plays the loaded audio.
+   * If the audio is already playing, it will be paused instead.
+   */
   async play() {
     if (!this.player) {
       throw new Error("No audio loaded");
@@ -104,6 +136,9 @@ class ToneAudioManager {
     }
   }
   
+  /**
+   * Pauses the playing audio.
+   */
   pause() {
     console.log("[ToneManager] Attempting to pause. Current state:", this.player?.state);
     if (this.player && this.player.state === "started") {
@@ -113,9 +148,11 @@ class ToneAudioManager {
     } else {
         console.log("Player is not in 'started' state, cannot pause.");
     }
-}
-  
+  }
 
+  /**
+   * Stops and cleans up the current player.
+   */
   stopAndCleanup() {
     if (this.player) {
       if (this.player.state === 'started') {
@@ -127,43 +164,73 @@ class ToneAudioManager {
     }
   }
 
+  /**
+   * Sets the volume of the audio.
+   * @param value The volume value, ranging from 0 to 1.
+   */
   setVolume(value: number) {
     // Convert 0-1 range to decibels (-Infinity to 0)
     this.volume.volume.value = value === 0 ? -Infinity : 20 * Math.log10(value);
   }
 
+  /**
+   * Sets the mute state of the audio.
+   * @param muted Whether the audio should be muted or not.
+   */
   setMute(muted: boolean) {
     this.volume.mute = muted;
   }
+
+  /**
+   * Gets the current playback time of the audio.
+   * @returns The current playback time in seconds.
+   */
   getCurrentTime(): number {
     if (this.player && this.player.state === "started") {
       return this.player.toSeconds(this.player.blockTime);
     }
     return 0; // Return 0 if stopped or player is null
   }
-  
-  
 
+  /**
+   * Gets the duration of the loaded audio.
+   * @returns The duration of the audio in seconds.
+   */
   getDuration(): number {
     return this.player?.buffer?.duration ?? 0;
   }
 
+  /**
+   * Seeks to the specified time in the audio.
+   * @param time The time to seek to, in seconds.
+   */
   seek(time: number) {
     if (this.player) {
       this.player.seek(time);
     }
   }
 
+  /**
+   * Sets the callback function to be called when the audio playback ends.
+   * @param callback The callback function to be called.
+   */
   setOnEndCallback(callback: () => void) {
     this.onEndCallback = callback;
   }
 
+  /**
+   * Cleans up the audio manager, stopping any playing audio and disposing of the player.
+   */
   cleanup() {
     this.stopAndCleanup();
     this.initialized = false;
     this.onEndCallback = null;
   }
 
+  /**
+   * Checks if the audio manager has been initialized.
+   * @returns Whether the audio manager has been initialized or not.
+   */
   isInitialized(): boolean {
     return this.initialized;
   }
