@@ -46,6 +46,11 @@ A Progressive Web App that converts text to speech with advanced audio managemen
   - IndexedDB for Audio Data
   - Local Storage for Preferences
 
+- **Monitoring**
+  - Sentry Error Tracking
+  - Performance Monitoring
+  - Session Replay
+
 - **Core Libraries**
   - Mozilla Readability
   - Web Audio API
@@ -111,6 +116,17 @@ src/
 ### Prerequisites
 - Node.js 18+
 - npm or yarn
+- Sentry.io account (for error monitoring)
+
+### Environment Setup
+1. Copy `.env.example` to `.env.local`
+2. Configure the following environment variables:
+   ```
+   NEXT_PUBLIC_SENTRY_DSN=your-sentry-dsn
+   SENTRY_AUTH_TOKEN=your-sentry-auth-token
+   SENTRY_ORG=your-sentry-org
+   SENTRY_PROJECT=your-sentry-project
+   ```
 
 ### Development Commands
 ```bash
@@ -126,6 +142,13 @@ npm run start
 # Type checking
 npm run typecheck
 ```
+
+### Error Monitoring
+The application uses Sentry for error tracking and monitoring:
+- Automatic error capturing
+- Performance monitoring
+- Session replay for debugging
+- Custom error context and breadcrumbs
 
 ## Contributing
 

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useCallback, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useAudioQueue } from '@/lib/store/audio-queue'
@@ -23,7 +23,7 @@ import { ProgressBar } from './progress-bar'
 import { Slider } from '@/components/ui/slider'
 import Image from 'next/image'
 import { isIOSSafari } from '@/lib/utils/device';
-import { setUserInteraction, handleIOSAudioInit } from '@/lib/utils/ios-audio';
+import { setUserInteraction, handleIOSAudioInit, cleanupIOSAudio, needsUserInteraction } from '@/lib/utils/ios-audio';
 
 export function MiniPlayer() {
   const { 
@@ -57,10 +57,82 @@ export function MiniPlayer() {
   const [initialVolume, setInitialVolume] = useState<number>(0);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
 
-  // Test CI/CD Pipeline - Added comment to trigger deployment
+  const retryTimeoutRef = useRef<NodeJS.Timeout>()
+  const maxRetries = useRef(3)
+  const currentRetries = useRef(0)
+
+  const handlePlay = useCallback(async () => {
+    try {
+      if (isIOSSafari() && needsUserInteraction()) {
+        const initialized = await handleIOSAudioInit()
+        if (!initialized) {
+          console.log('[MiniPlayer] iOS audio initialization failed')
+          return
+        }
+      }
+
+      if (currentIndex !== null) {
+        await play(queue[currentIndex].id)
+        currentRetries.current = 0 // Reset retry counter on successful play
+      } else if (queue.length > 0) {
+        await play(queue[0].id)
+        currentRetries.current = 0
+      }
+    } catch (error) {
+      console.error('[MiniPlayer] Play error:', error)
+      
+      // Implement retry logic with exponential backoff
+      if (currentRetries.current < maxRetries.current) {
+        const backoffDelay = Math.pow(2, currentRetries.current) * 1000
+        console.log(`[MiniPlayer] Retrying play in ${backoffDelay}ms (attempt ${currentRetries.current + 1})`)
+        
+        if (retryTimeoutRef.current) {
+          clearTimeout(retryTimeoutRef.current)
+        }
+        
+        retryTimeoutRef.current = setTimeout(() => {
+          currentRetries.current++
+          handlePlay()
+        }, backoffDelay)
+      }
+    }
+  }, [currentIndex, queue, play])
+
+  const handlePause = useCallback(() => {
+    pause()
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current)
+    }
+    currentRetries.current = 0
+  }, [pause])
+
+  // Handle volume changes
+  const handleVolumeChange = useCallback((newVolume: number) => {
+    setVolume(Math.max(0, Math.min(1, newVolume)))
+  }, [setVolume])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current)
+      }
+      cleanupIOSAudio()
+    }
+  }, [])
+
+  // Reset retry counter when queue or current item changes
+  useEffect(() => {
+    currentRetries.current = 0
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current)
+    }
+  }, [queue, currentIndex])
+
   const currentItem = currentIndex !== null ? queue[currentIndex] : null
   const hasItems = queue.length > 0
 
+  // Test CI/CD Pipeline - Added comment to trigger deployment
   // Debug current state and progress bar conditions
   React.useEffect(() => {
     console.log('[PROGRESS_BAR] MiniPlayer State:', {
@@ -98,60 +170,33 @@ export function MiniPlayer() {
     }
   }, [requiresUserInteraction])
 
-  // Initialize audio context for iOS when component mounts
-  // React.useEffect(() => {
-  //   if (isIOSSafari()) {
-  //     handleIOSAudioInit().then(success => {
-  //       if (!success) {
-  //         toast("Please tap play to enable audio");
-  //       }
-  //     }).catch(error => {
-  //       console.error('iOS audio init error:', error);
-  //       toast.error("Audio initialization failed");
-  //     });
-  //   }
-  // }, []);
-
-  // Handle iOS audio resume on visibility change
-  React.useEffect(() => {
-    if (!isIOSSafari()) return
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && isPlaying) {
-        handleIOSAudioInit().catch(console.error)
-      }
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-    }
-  }, [isPlaying])
-
   // Detect touch device on mount
   useEffect(() => {
     setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0)
   }, [])
 
-  // Update current time when audio is playing
+  // Update current time and handle track completion
   React.useEffect(() => {
     if (!currentItem?.segments[currentItem.currentSegment]?.audio) return;
     
     const audio = currentItem.segments[currentItem.currentSegment].audio!;
     
     const handleTimeUpdate = () => {
-      console.log('[MINI_PLAYER] Time update:', {
-        currentTime: audio.currentTime,
-        duration: audio.duration,
-        segment: currentItem.currentSegment + 1,
-        totalSegments: currentItem.totalSegments
-      });
-      
-      // Update time in store using the updateTime function
       updateTime(audio.currentTime, audio.duration);
+    };
+
+    const handleEnded = async () => {
+      console.log('[MINI_PLAYER] Audio segment ended');
+      
+      // If this was the last segment of the current track
+      if (currentItem.currentSegment === currentItem.totalSegments - 1) {
+        console.log('[MINI_PLAYER] Last segment completed, moving to next track');
+        await next(); // Move to next track in queue
+      }
     };
     
     audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('ended', handleEnded);
     
     // Initial update
     if (audio.duration) {
@@ -160,62 +205,9 @@ export function MiniPlayer() {
     
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('ended', handleEnded);
     };
-  }, [currentItem?.id, currentItem?.currentSegment, updateTime]);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStartY(e.touches[0].clientY)
-    setInitialVolume(volume)
-  }
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    e.preventDefault()
-    if (touchStartY === null) return
-
-    const touchDelta = (touchStartY - e.touches[0].clientY) * 0.005
-    const newVolume = Math.max(0, Math.min(1, initialVolume + touchDelta))
-    setVolume(newVolume)
-  }
-
-  const handleTouchEnd = () => {
-    setTouchStartY(null)
-  }
-
-  const handlePlay = async () => {
-    try {
-      console.log('Play button clicked')
-      
-      // For iOS Safari, try to initialize audio first
-      if (isIOSSafari()) {
-        setUserInteraction(true); // Mark that we have user interaction
-        const success = await handleIOSAudioInit();
-        if (!success) {
-          console.log('iOS audio init failed, requesting another tap');
-          toast("Tap again to start audio");
-          return;
-        }
-      }
-
-      if (isPlaying) {
-        await pause()
-      } else {
-        await play()
-      }
-    } catch (error) {
-      console.error('Play error:', error)
-      
-      // Handle iOS interaction requirement
-      if (error instanceof Error && 
-          (error.message.includes('iOS requires user interaction') || 
-           error.message.includes('play() failed'))) {
-        console.log('iOS requires another user interaction');
-        toast("Tap again to start audio");
-        return;
-      }
-      
-      toast.error("Failed to play audio");
-    }
-  }
+  }, [currentItem?.id, currentItem?.currentSegment, updateTime, next]);
 
   const handleNext = async () => {
     try {
@@ -245,6 +237,24 @@ export function MiniPlayer() {
     console.log('Clearing queue')
     clear()
     toast.success("Queue cleared");
+  }
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartY(e.touches[0].clientY)
+    setInitialVolume(volume)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    e.preventDefault()
+    if (touchStartY === null) return
+
+    const touchDelta = (touchStartY - e.touches[0].clientY) * 0.005
+    const newVolume = Math.max(0, Math.min(1, initialVolume + touchDelta))
+    setVolume(newVolume)
+  }
+
+  const handleTouchEnd = () => {
+    setTouchStartY(null)
   }
 
   const PlayButton = () => {

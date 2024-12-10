@@ -52,13 +52,16 @@ function dispatchStorageEvent() {
   }
 }
 
-export async function storeAudioData(id: string, data: ArrayBuffer): Promise<void> {
-  if (!isBrowser) return
+export async function storeAudioData(data: ArrayBuffer): Promise<string> {
+  if (!isBrowser) throw new Error('IndexedDB is not available in this environment')
 
   const database = await getDb()
   return new Promise((resolve, reject) => {
     const transaction = database.transaction([AUDIO_STORE], 'readwrite')
     const store = transaction.objectStore(AUDIO_STORE)
+    
+    // Generate a unique ID for the audio data
+    const id = `audio_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     
     const request = store.put({
       id,
@@ -68,8 +71,8 @@ export async function storeAudioData(id: string, data: ArrayBuffer): Promise<voi
 
     request.onerror = () => reject(request.error)
     request.onsuccess = () => {
-      dispatchStorageEvent();
-      resolve()
+      dispatchStorageEvent()
+      resolve(id)
     }
   })
 }
