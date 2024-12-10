@@ -121,9 +121,16 @@ export function MiniPlayer({ onClose }: MiniPlayerProps) {
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current)
       }
-      cleanupIOSAudio()
-    }
-  }, [])
+      handlePause(); // Stop any playing audio
+      cleanupIOSAudio();
+    };
+  }, [handlePause]);
+
+  // Handle close button click
+  const handleClose = useCallback(() => {
+    handlePause(); // Stop any playing audio
+    onClose?.(); // Call the provided onClose callback
+  }, [handlePause, onClose]);
 
   // Reset retry counter when queue or current item changes
   useEffect(() => {
@@ -240,7 +247,7 @@ export function MiniPlayer({ onClose }: MiniPlayerProps) {
   const handleClearQueue = () => {
     console.log('Clearing queue')
     clear()
-    onClose?.() // This will trigger handleClosePlayer in page.tsx
+    handleClose(); // This will trigger handleClosePlayer in page.tsx
     toast.success('Queue cleared')
   }
 

@@ -59,6 +59,7 @@
     "sentence-splitter": "^5.0.0",
     "sonner": "^1.7.0",
     "tailwind-merge": "^2.5.5",
+    "tone": "^15.0.4",
     "zustand": "^5.0.1"
   }
 }

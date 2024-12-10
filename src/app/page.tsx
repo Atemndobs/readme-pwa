@@ -64,7 +64,7 @@ export default function Home() {
     }
   }, [queue, setTextInput, setUrlInput])
 
-  const handleClearText = () => {
+  const handleClearText = (value: string) => {
     setTextInput('')
     setUrlInput('')
     clear() // This will clear the audio queue and stop playback
@@ -192,7 +192,7 @@ export default function Home() {
                     variant="ghost"
                     size="icon"
                     className="absolute right-2 top-1/2 -translate-y-1/2"
-                    onClick={handleClearText}
+                    onClick={() => handleClearText('')}
                   >
                     <XIcon className="h-4 w-4" />
                   </Button>
