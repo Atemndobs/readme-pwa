@@ -351,20 +351,18 @@ export const useAudioQueue = create<AudioQueueStore>()(
       },
 
       clear: async () => {
-        const state = get()
-        if (state.currentAudio) {
-          state.currentAudio.pause()
-          state.currentAudio.currentTime = 0
+        const currentState = get()
+        if (currentState.currentAudio) {
+          currentState.currentAudio.pause()
+          currentState.currentAudio.currentTime = 0
+          // currentState.currentAudio.src = '' // Add this line to fully unload the audio
         }
-        
         await clearAllAudioData()
-        
         set({
-          ...state,
           queue: [],
           currentIndex: null,
-          currentAudio: null,
           isPlaying: false,
+          currentAudio: null,
           isConverting: false,
           conversionAbortController: null,
           currentTime: 0,

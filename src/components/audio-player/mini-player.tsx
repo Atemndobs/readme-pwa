@@ -25,7 +25,11 @@ import Image from 'next/image'
 import { isIOSSafari } from '@/lib/utils/device';
 import { setUserInteraction, handleIOSAudioInit, cleanupIOSAudio, needsUserInteraction } from '@/lib/utils/ios-audio';
 
-export function MiniPlayer() {
+interface MiniPlayerProps {
+  onClose?: () => void
+}
+
+export function MiniPlayer({ onClose }: MiniPlayerProps) {
   const { 
     queue, 
     currentIndex, 
@@ -236,7 +240,8 @@ export function MiniPlayer() {
   const handleClearQueue = () => {
     console.log('Clearing queue')
     clear()
-    toast.success("Queue cleared");
+    onClose?.() // This will trigger handleClosePlayer in page.tsx
+    toast.success('Queue cleared')
   }
 
   const handleTouchStart = (e: React.TouchEvent) => {
