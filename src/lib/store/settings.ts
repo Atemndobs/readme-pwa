@@ -48,13 +48,13 @@ export interface SettingsState {
   voice: VoiceId;
   textInput: string;
   urlInput: string;
-  activeTab: 'text' | 'url';
+  activeTab: string;
   storage: StorageSettings;
   setLanguage: (language: VoiceLanguage) => void;
   setVoice: (voice: VoiceId) => void;
   setTextInput: (text: string) => void;
   setUrlInput: (url: string) => void;
-  setActiveTab: (tab: 'text' | 'url') => void;
+  setActiveTab: (tab: string) => void;
   setStorage: (storage: StorageSettings) => void;
   clearTextInput: () => void;
   clearUrlInput: () => void;
@@ -67,7 +67,7 @@ interface PersistedState {
   voice: VoiceId;
   textInput: string;
   urlInput: string;
-  activeTab: 'text' | 'url';
+  activeTab: string;
   storage: StorageSettings;
 }
 
@@ -88,7 +88,7 @@ export const useSettings = create<SettingsState>()(
       setVoice: (voice) => set({ voice }),
       setTextInput: (text) => set({ textInput: text }),
       setUrlInput: (url) => set({ urlInput: url }),
-      setActiveTab: (tab) => set({ activeTab: tab }),
+      setActiveTab: (tab: string) => set({ activeTab: tab }),
       setStorage: (storage) => set({ storage }),
       clearTextInput: () => set({ textInput: '' }),
       clearUrlInput: () => set({ urlInput: '' }),

@@ -3,9 +3,11 @@ import { persist } from 'zustand/middleware'
 import { TTSError, convertTextToSpeech } from '../api/tts'
 import { VoiceId } from './settings'
 import { segmentText, TextSegment, PAUSE_DURATIONS } from '../utils/text-segmentation'
-import { storeAudioData, getAudioData, removeAudioData, clearAudioData } from '../utils/indexed-db'
 import { isIOSSafari } from '@/lib/utils/device';
 import { handleIOSAudioInit, getUserInteraction } from '@/lib/utils/ios-audio';
+import * as Sentry from '@sentry/nextjs';
+import { getDb, storeAudioData, getAudioData, removeAudioData } from '../utils/indexed-db'
+import { toneManager } from '../utils/tone-manager';
 
 type AudioSegmentStatus = 'pending' | 'loading' | 'ready' | 'playing' | 'paused' | 'error' | 'cancelled'
 type QueueItemStatus = 'pending' | 'loading' | 'ready' | 'playing' | 'paused' | 'error' | 'partial' | 'converting'
@@ -35,7 +37,7 @@ interface AudioQueueStore {
   queue: QueueItem[]
   currentIndex: number | null
   isPlaying: boolean
-  currentAudio: HTMLAudioElement | null
+  currentAudio: null
   isConverting: boolean
   conversionAbortController: AbortController | null
   volume: number
@@ -70,17 +72,13 @@ function generateId() {
   return Math.random().toString(36).substring(7)
 }
 
-let audioContext: AudioContext | null = null;
-
 const initializeAudioContext = () => {
-  if (!audioContext) {
-    // Create new audio context with iOS compatible options
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    audioContext = new AudioContext({
-      latencyHint: 'interactive',
-      sampleRate: 44100
-    });
-  }
+  // Create new audio context with iOS compatible options
+  const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+  const audioContext = new AudioContext({
+    latencyHint: 'interactive',
+    sampleRate: 44100
+  });
   
   // Resume audio context if it's suspended (required for iOS)
   if (audioContext.state === 'suspended') {
@@ -90,22 +88,49 @@ const initializeAudioContext = () => {
   return audioContext;
 };
 
-const createAudioElement = () => {
-  const audio = new Audio();
-  
-  // iOS Safari specific setup
-  if (isIOSSafari()) {
-    audio.preload = 'none'; // Prevent automatic loading
-    audio.autoplay = false; // Explicitly disable autoplay
-    audio.setAttribute('webkit-playsinline', 'true');
-    audio.setAttribute('playsinline', 'true');
-    audio.setAttribute('x-webkit-airplay', 'allow');
-  } else {
-    audio.preload = 'auto';
-  }
-  
-  return audio;
+function createAudioElement(get: () => AudioQueueStore): void {
+  toneManager.initializeContext();
+  toneManager.setVolume(get().volume);
+  toneManager.setMute(get().muted);
 };
+
+async function addAudioSegment(set: (updater: (state: AudioQueueStore) => AudioQueueStore) => void, segment: TextSegment, voice: VoiceId): Promise<void> {
+  const audioData = await convertTextToSpeech(segment.text, voice);
+  if (audioData && audioData[0]?.audio) {
+    const arrayBuffer = await audioData[0].audio.arrayBuffer();
+    await storeAudioData(segment.id, arrayBuffer);
+    
+    // Create blob URL for the audio data
+    const blob = new Blob([arrayBuffer], { type: 'audio/mp3' });
+    const audioUrl = URL.createObjectURL(blob);
+    
+    // Update the queue with the audio URL
+    set((state: AudioQueueStore) => ({
+      ...state,
+      queue: state.queue.map(item => ({
+        ...item,
+        segments: item.segments.map(seg => 
+          seg.id === segment.id
+            ? { ...seg, audioUrl, status: 'ready' as AudioSegmentStatus }
+            : seg
+        )
+      }))
+    }));
+  }
+}
+
+async function fetchAudioSegment(id: string): Promise<ArrayBuffer | null> {
+  return await getAudioData(id);
+}
+
+async function deleteAudioSegment(id: string): Promise<void> {
+  await removeAudioData(id);
+}
+
+async function clearAllAudioData(): Promise<void> {
+  const db = await getDb();
+  await db.table('audio-data').clear();
+}
 
 export const useAudioQueue = create<AudioQueueStore>()(
   persist(
@@ -128,195 +153,161 @@ export const useAudioQueue = create<AudioQueueStore>()(
       },
 
       add: async (text: string, voice: VoiceId, source?: string, imageUrl?: string) => {
-        console.log('Adding new audio item:', { text, voice, source, imageUrl })
-        
         const state = get()
-        if (state.isConverting) {
-          console.warn('Already converting text to speech')
-          return
-        }
-
         const id = generateId()
-        const segments = segmentText(text)
-        const totalSegments = segments.length
 
-        console.log('Created segments:', { id, totalSegments, segments })
+        try {
+          const segments = segmentText(text).map(segment => ({
+            ...segment,
+            id: generateId(),
+            audioUrl: null,
+            audio: null,
+            status: 'pending' as AudioSegmentStatus
+          }))
 
-        // Add item to queue immediately
-        set(state => ({
-          queue: [
-            ...state.queue,
-            {
+          set((state: AudioQueueStore) => ({
+            ...state,
+            queue: [...state.queue, {
               id,
               text,
               voice,
               source,
               imageUrl,
-              segments: segments.map((segment, index) => ({
-                ...segment,
-                id: `${id}-${index}`,
-                audioUrl: null,
-                audio: null,
-                status: 'pending'
-              })),
+              segments,
               status: 'converting',
               error: null,
               currentSegment: 0,
-              totalSegments
-            }
-          ],
-          isConverting: true,
-          conversionAbortController: new AbortController()
-        }))
+              totalSegments: segments.length
+            }]
+          }))
 
-        try {
-          // Convert segments one by one
-          for (let i = 0; i < segments.length; i++) {
-            console.log(`Converting segment ${i + 1}/${segments.length}`)
-            
-            const segmentId = `${id}-${i}`
-            const response = await fetch('/api/tts', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                text: segments[i].text,
-                voice,
-              }),
-              signal: get().conversionAbortController?.signal,
-            })
+          const MAX_PARALLEL_CONVERSIONS = 3
+          const conversionQueue = [...segments]
+          const inProgress = new Set<string>()
+          const abortController = new AbortController()
+          
+          set({ isConverting: true, conversionAbortController: abortController })
 
-            if (!response.ok) {
-              throw new Error(`Failed to convert text: ${response.statusText}`)
-            }
+          while (conversionQueue.length > 0 || inProgress.size > 0) {
+            while (conversionQueue.length > 0 && inProgress.size < MAX_PARALLEL_CONVERSIONS) {
+              const segment = conversionQueue.shift()!
+              inProgress.add(segment.id)
 
-            // Get audio data as ArrayBuffer
-            const audioData = await response.arrayBuffer()
-            console.log(`Received audio data for segment ${i + 1}, length: ${audioData.byteLength}`)
-            
-            // Store audio data in IndexedDB
-            await storeAudioData(segmentId, audioData)
-            console.log(`Stored audio data in IndexedDB for segment ${i + 1}`)
-            
-            // Create blob from ArrayBuffer
-            try {
-              const blob = new Blob([audioData], { type: 'audio/wav' })
-              const url = URL.createObjectURL(blob)
-              
-              // Set up audio element
-              const audio = createAudioElement()
-              audio.src = url
-              await audio.load() // Explicitly load the audio
-              
-              // Update segment with URL and audio
-              set(state => {
-                const updatedItem = state.queue.find(item => item.id === id)
-                if (!updatedItem) return state
+              convertTextToSpeech(segment.text, voice, abortController.signal)
+                .then(async (audioData) => {
+                  try {
+                    await addAudioSegment(set, segment, voice);
+                    
+                    set((state: AudioQueueStore) => ({
+                      ...state,
+                      queue: state.queue.map(item =>
+                        item.id === id
+                          ? {
+                              ...item,
+                              segments: item.segments.map(s =>
+                                s.id === segment.id
+                                  ? { ...s, status: 'ready' }
+                                  : s
+                              )
+                            }
+                          : item
+                      )
+                    }))
 
-                // Update the specific segment
-                const segment = updatedItem.segments[i]
-                segment.audioUrl = url
-                segment.audio = audio
-                segment.status = 'ready'
-
-                // Count ready segments
-                const readySegments = updatedItem.segments.reduce((count, s) => {
-                  return count + (s.status === 'ready' ? 1 : 0)
-                }, 0)
-
-                console.log('[AUDIO_QUEUE] Segment conversion status:', {
-                  segmentId: segment.id,
-                  url,
-                  currentSegment: i + 1,
-                  totalSegments: segments.length,
-                  readySegments,
-                  allSegmentsReady: readySegments === segments.length
+                    const currentState = get()
+                    const queueItem = currentState.queue.find(item => item.id === id)
+                    const isFirstSegment = queueItem && 
+                                         segment.id === queueItem.segments[0].id && 
+                                         !currentState.isPlaying && 
+                                         currentState.currentIndex === null
+                    
+                    if (isFirstSegment && !isIOSSafari()) {
+                      await get().play(id, 0)
+                    } else if (isFirstSegment && isIOSSafari()) {
+                      set({ requiresUserInteraction: true })
+                    }
+                  } catch (error) {
+                    console.error('Failed to store audio data:', error)
+                    set((state: AudioQueueStore) => ({
+                      ...state,
+                      queue: state.queue.map(item =>
+                        item.id === id
+                          ? {
+                              ...item,
+                              segments: item.segments.map(s =>
+                                s.id === segment.id
+                                  ? { ...s, status: 'error', error: 'Failed to store audio' }
+                                  : s
+                              )
+                            }
+                          : item
+                      )
+                    }))
+                  }
                 })
-
-                // Update queue item status if all segments are ready
-                if (readySegments === segments.length) {
-                  updatedItem.status = 'ready'
-                }
-
-                return {
-                  queue: state.queue.map(item =>
-                    item.id === id ? updatedItem : item
-                  )
-                }
-              })
-              
-            } catch (error) {
-              console.error(`[AUDIO_QUEUE] Error loading audio for segment ${i + 1}:`, error)
-              set(state => ({
-                queue: state.queue.map(item =>
-                  item.id === id
-                    ? {
-                        ...item,
-                        segments: item.segments.map((segment, index) =>
-                          index === i
-                            ? { ...segment, status: 'error', error: error instanceof Error ? error.message : 'Unknown error' }
-                            : segment
-                        ),
-                        status: 'error',
-                        error: `Failed to load audio for segment ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`
-                      }
-                    : item
-                )
-              }))
-              throw error
+                .catch((error) => {
+                  if (error instanceof TTSError) {
+                    set((state: AudioQueueStore) => ({
+                      ...state,
+                      queue: state.queue.map(item =>
+                        item.id === id
+                          ? {
+                              ...item,
+                              segments: item.segments.map(s =>
+                                s.id === segment.id
+                                  ? { ...s, status: 'error', error: error.message }
+                                  : s
+                              )
+                            }
+                          : item
+                      )
+                    }))
+                  }
+                })
+                .finally(() => {
+                  inProgress.delete(segment.id)
+                })
             }
 
-            // If this is the first segment and no other items are playing, start playback (except on iOS)
-            if (i === 0 && !get().isPlaying && get().currentIndex === null && !isIOSSafari()) {
-              console.log('Starting playback of first segment')
-              await get().play(id, 0)
-            } else if (i === 0 && isIOSSafari()) {
-              console.log('On iOS Safari - waiting for user interaction before playing')
-              set({ requiresUserInteraction: true })
+            await new Promise(resolve => setTimeout(resolve, 100))
+
+            if (abortController.signal.aborted) {
+              break
             }
           }
 
-          console.log('Finished converting all segments')
-          
-          // Ensure final status is set correctly
-          set(state => {
-            const item = state.queue.find(item => item.id === id)
-            if (!item) return state
-
-            const allSegmentsReady = item.segments.every(segment => segment.status === 'ready')
-            console.log('Final conversion status:', {
-              id,
-              allSegmentsReady,
-              segmentStatuses: item.segments.map(s => s.status)
-            })
-
-            return {
-              queue: state.queue.map(qItem =>
-                qItem.id === id
+          const finalState = get()
+          const queueItem = finalState.queue.find(item => item.id === id)
+          if (queueItem) {
+            const hasErrors = queueItem.segments.some(s => s.status === 'error')
+            const allReady = queueItem.segments.every(s => s.status === 'ready')
+            set((state: AudioQueueStore) => ({
+              ...state,
+              queue: state.queue.map(item =>
+                item.id === id
                   ? {
-                      ...qItem,
-                      status: allSegmentsReady ? 'ready' : 'partial'
+                      ...item,
+                      status: hasErrors ? 'error' : (allReady ? 'ready' : 'partial'),
+                      error: hasErrors ? 'Some segments failed to convert' : null
                     }
-                  : qItem
-              )
-            }
-          })
+                  : item
+              ),
+              isConverting: false,
+              conversionAbortController: null
+            }))
+          }
         } catch (error) {
-          console.error('Conversion error:', error)
-          set(state => ({
+          console.error('Failed to add item to queue:', error)
+          set((state: AudioQueueStore) => ({
+            ...state,
             queue: state.queue.map(item =>
               item.id === id
-                ? {
-                    ...item,
-                    status: 'error',
-                    error: error instanceof Error ? error.message : 'Unknown error'
-                  }
+                ? { ...item, status: 'error', error: 'Failed to process text' }
                 : item
-            )
+            ),
+            isConverting: false,
+            conversionAbortController: null
           }))
-        } finally {
-          set({ isConverting: false, conversionAbortController: null })
         }
       },
 
@@ -325,13 +316,13 @@ export const useAudioQueue = create<AudioQueueStore>()(
         const item = state.queue.find(item => item.id === id)
         
         if (item) {
-          // Remove audio data from IndexedDB
           await Promise.all(item.segments.map(segment => 
-            removeAudioData(segment.id)
+            deleteAudioSegment(segment.id)
           ))
         }
         
-        set(state => ({
+        set((state: AudioQueueStore) => ({
+          ...state,
           queue: state.queue.filter(item => item.id !== id),
           currentIndex:
             state.currentIndex !== null
@@ -345,26 +336,18 @@ export const useAudioQueue = create<AudioQueueStore>()(
       },
 
       clear: async () => {
-        // Stop any playing audio
-        const state = get()
-        if (state.currentAudio) {
-          state.currentAudio.pause()
-          state.currentAudio.currentTime = 0
-        }
-        
-        // Clear all audio data from IndexedDB
-        await clearAudioData()
-        
+        const currentState = get();
+        toneManager.cleanup(); // Clean up Tone.js resources
+        await clearAllAudioData();
         set({
           queue: [],
           currentIndex: null,
-          currentAudio: null,
           isPlaying: false,
           isConverting: false,
           conversionAbortController: null,
           currentTime: 0,
           duration: 0
-        })
+        });
       },
 
       next: async () => {
@@ -386,8 +369,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
           }))
         });
 
-        // Try next segment first
-        if (currentItem.currentSegment < currentItem.totalSegments - 1) {
+        if (currentItem && currentItem.currentSegment < currentItem.totalSegments - 1) {
           const nextSegment = currentItem.currentSegment + 1;
           
           console.log('[AUDIO_QUEUE] Moving to next segment:', {
@@ -397,8 +379,8 @@ export const useAudioQueue = create<AudioQueueStore>()(
             hasAudio: !!currentItem.segments[nextSegment]?.audio
           });
 
-          // Update queue state with next segment
-          set(state => ({
+          set((state: AudioQueueStore) => ({
+            ...state,
             queue: state.queue.map((item, i) =>
               i === state.currentIndex
                 ? { ...item, currentSegment: nextSegment }
@@ -406,7 +388,6 @@ export const useAudioQueue = create<AudioQueueStore>()(
             )
           }));
 
-          // Auto-play next segment
           try {
             await get().play(currentItem.id, nextSegment);
             console.log('[AUDIO_QUEUE] Started playing next segment:', nextSegment);
@@ -416,7 +397,6 @@ export const useAudioQueue = create<AudioQueueStore>()(
           return;
         }
 
-        // If no more segments, try next track
         if (state.currentIndex < state.queue.length - 1) {
           const nextIndex = state.currentIndex + 1;
           const nextItem = state.queue[nextIndex];
@@ -431,10 +411,8 @@ export const useAudioQueue = create<AudioQueueStore>()(
             }))
           });
 
-          // Update current index
-          set({ currentIndex: nextIndex });
+          set({ ...state, currentIndex: nextIndex });
           
-          // Auto-play next track from beginning
           try {
             await get().play(nextItem.id, 0);
             console.log('[AUDIO_QUEUE] Started playing next track');
@@ -446,6 +424,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
 
         console.log('[AUDIO_QUEUE] Reached end of queue');
         set({ 
+          ...state,
           isPlaying: false,
           currentTime: 0,
           duration: 0
@@ -456,8 +435,9 @@ export const useAudioQueue = create<AudioQueueStore>()(
         const { queue, currentIndex, currentAudio } = get()
         
         if (currentAudio) {
-          currentAudio.pause()
-          currentAudio.currentTime = 0
+          // currentAudio.pause()
+          // currentAudio.currentTime = 0
+          // currentAudio.src = '' // Add this line to fully unload the audio
         }
 
         if (currentIndex === null) {
@@ -469,10 +449,9 @@ export const useAudioQueue = create<AudioQueueStore>()(
 
         const currentItem = queue[currentIndex]
 
-        // If we're not at the start of the current item's segments
         if (currentItem && currentItem.currentSegment > 0) {
-          // Update currentSegment before playing previous
-          set(state => ({
+          set((state: AudioQueueStore) => ({
+            ...state,
             queue: state.queue.map((item, idx) => 
               idx === currentIndex 
                 ? { ...item, currentSegment: item.currentSegment - 1 }
@@ -483,11 +462,10 @@ export const useAudioQueue = create<AudioQueueStore>()(
           return
         }
 
-        // Move to previous item
         if (currentIndex > 0) {
           const prevItem = queue[currentIndex - 1]
-          // Update current and previous items' segments
-          set(state => ({
+          set((state: AudioQueueStore) => ({
+            ...state,
             queue: state.queue.map((item, idx) => 
               idx === currentIndex 
                 ? { ...item, currentSegment: 0 }
@@ -500,209 +478,136 @@ export const useAudioQueue = create<AudioQueueStore>()(
         }
       },
 
+      togglePlayPause: async () => {
+        const state = get(); // Get the current state
+        if (state.isPlaying) {
+            console.log("[AudioQueue] Pausing audio...");
+            toneManager.pause();
+            set(state => ({ ...state, isPlaying: false }));
+        } else {
+            console.log("[AudioQueue] Playing audio...");
+            await toneManager.play(); // Ensure to await play if it's an async function
+            set(state => ({ ...state, isPlaying: true }));
+        }
+    },
+
       play: async (id?: string, segmentIndex?: number) => {
         const state = get();
+        let targetId = id;
+        let targetSegmentIndex = segmentIndex;
         
+
         try {
-          console.log('[AUDIO_QUEUE] Play called:', {
-            id,
-            segmentIndex,
-            currentState: {
-              isPlaying: state.isPlaying,
-              currentIndex: state.currentIndex,
-              hasCurrentAudio: !!state.currentAudio
-            }
-          });
+          // Initialize audio context first
+          await toneManager.initializeContext();
 
-          // For iOS Safari, check user interaction first
-          if (isIOSSafari() && !getUserInteraction()) {
-            const initialized = await handleIOSAudioInit();
-            if (!initialized) {
-              set({ requiresUserInteraction: true });
-              throw new Error('iOS requires user interaction to play audio');
+          if (!targetId && state.queue.length > 0) {
+            if (state.currentIndex !== null) {
+              targetId = state.queue[state.currentIndex].id;
+            } else {
+              targetId = state.queue[0].id;
             }
           }
 
-          // Stop any currently playing audio
-          if (state.currentAudio) {
-            state.currentAudio.pause();
-            state.currentAudio.currentTime = 0;
-            state.currentAudio.removeEventListener('timeupdate', state.currentAudio.ontimeupdate as any);
-            state.currentAudio.removeEventListener('ended', state.currentAudio.onended as any);
-            state.currentAudio.removeEventListener('error', state.currentAudio.onerror as any);
-            set({ currentAudio: null, currentTime: 0, duration: 0 });
-          }
-
-          const targetId = id || (state.currentIndex !== null ? state.queue[state.currentIndex].id : state.queue[0]?.id);
           if (!targetId) {
-            console.log('[AUDIO_QUEUE] No target ID found');
+            console.log('[AudioQueue] No target ID found');
             return;
           }
 
-          const queueItem = state.queue.find(item => item.id === targetId);
-          if (!queueItem) {
-            console.log('[AUDIO_QUEUE] Queue item not found:', targetId);
+          const queueItemIndex = state.queue.findIndex(item => item.id === targetId);
+          if (queueItemIndex === -1) {
+            console.log('[AudioQueue] Queue item not found:', targetId);
             return;
           }
 
-          const startSegmentIndex = segmentIndex ?? queueItem.currentSegment ?? 0;
-          const segment = queueItem.segments[startSegmentIndex];
-
-          if (!segment?.audioUrl) {
-            console.error('[AUDIO_QUEUE] No audio URL for segment:', startSegmentIndex);
-            throw new Error('Segment has no audio URL');
+          const queueItem = state.queue[queueItemIndex];
+          if (targetSegmentIndex === undefined) {
+            targetSegmentIndex = queueItem.currentSegment;
           }
 
-          console.log('[AUDIO_QUEUE] Setting up segment:', {
+          const segment = queueItem.segments[targetSegmentIndex];
+          if (!segment || !segment.audioUrl) {
+            console.log('[AudioQueue] No audio URL for segment:', targetSegmentIndex);
+            return;
+          }
+
+          console.log('[AUDIO_QUEUE] Loading audio:', {
             targetId,
-            startSegmentIndex,
-            hasAudio: !!segment?.audio,
+            segmentIndex: targetSegmentIndex,
             audioUrl: segment.audioUrl
           });
 
-          // Create new audio element if needed
-          if (!segment.audio) {
-            const audio = createAudioElement();
-            
-            // Set up event listeners before setting source
-            const handleTimeUpdate = () => {
-              if (!audio.duration) return; // Skip if duration not available yet
-              get().updateTime(audio.currentTime, audio.duration);
-            };
-
-            const handleEnded = async () => {
-              console.log('[AUDIO_QUEUE] Segment ended:', {
-                currentSegment: startSegmentIndex,
-                totalSegments: queueItem.totalSegments
-              });
-
-              // Clean up current audio
-              audio.removeEventListener('timeupdate', handleTimeUpdate);
-              audio.removeEventListener('ended', handleEnded);
-              audio.removeEventListener('error', handleError);
-              
-              // Only proceed if this is still the current audio
-              if (get().currentAudio === audio) {
-                set({ currentAudio: null, currentTime: 0 });
-
-                // Move to next segment if available
-                if (startSegmentIndex + 1 < queueItem.totalSegments) {
-                  console.log('[AUDIO_QUEUE] Moving to next segment:', startSegmentIndex + 1);
-                  set(state => ({
-                    queue: state.queue.map(item =>
-                      item.id === queueItem.id
-                        ? { ...item, currentSegment: startSegmentIndex + 1 }
-                        : item
-                    )
-                  }));
-                  
-                  try {
-                    await get().play(queueItem.id, startSegmentIndex + 1);
-                  } catch (error) {
-                    console.error('[AUDIO_QUEUE] Failed to play next segment:', error);
-                    get().pause();
-                  }
-                } else {
-                  // Move to next queue item if available
-                  const nextIndex = (state.currentIndex ?? 0) + 1;
-                  if (nextIndex < state.queue.length) {
-                    console.log('[AUDIO_QUEUE] Moving to next queue item');
-                    await get().next();
-                  } else {
-                    console.log('[AUDIO_QUEUE] Reached end of queue');
-                    get().pause();
-                  }
-                }
-              }
-            };
-
-            const handleError = (error: ErrorEvent) => {
-              console.error('[AUDIO_QUEUE] Audio error:', {
-                segment: startSegmentIndex + 1,
-                error: error.message
-              });
-              audio.removeEventListener('timeupdate', handleTimeUpdate);
-              audio.removeEventListener('ended', handleEnded);
-              audio.removeEventListener('error', handleError);
-              if (get().currentAudio === audio) {
-                get().pause();
-              }
-            };
-
-            // Set up event listeners
-            audio.addEventListener('timeupdate', handleTimeUpdate);
-            audio.addEventListener('ended', handleEnded);
-            audio.addEventListener('error', handleError);
-
-            // Set source after listeners are set up
-            audio.src = segment.audioUrl;
-            segment.audio = audio;
-          }
-
-          const audioToPlay = segment.audio!;
+          await toneManager.loadAudio(segment.audioUrl);
           
-          // Update volume before playing
-          audioToPlay.volume = state.muted ? 0 : state.volume;
+          // Set up autoplay callback before starting playback
+          toneManager.setOnEndCallback(async () => {
+            console.log('[AudioQueue] Audio ended, checking for next item');
+            const currentState = get();
+            
+            // If we're still playing (not manually paused)
+            if (currentState.isPlaying) {
+              // Check if there are more segments in the current item
+              const currentItem = currentState.queue[queueItemIndex];
+              if (currentItem && typeof targetSegmentIndex === 'number' && targetSegmentIndex < currentItem.totalSegments - 1) {
+                console.log('[AudioQueue] Playing next segment');
+                await get().play(targetId, targetSegmentIndex + 1);
+              } else {
+                // Move to the next item in queue
+                console.log('[AudioQueue] Current item finished, moving to next in queue');
+                await get().next();
+              }
+            }
+          });
 
-          // Update state before playing
-          set({ 
-            currentAudio: audioToPlay,
+          await toneManager.play();
+          console.log('[AudioQueue] Audio playing successfully');
+
+          set(state => ({
+            ...state,
+            currentIndex: queueItemIndex,
             isPlaying: true,
-            currentIndex: state.queue.findIndex(item => item.id === targetId),
-            currentTime: 0
-          });
-
-          console.log('[AUDIO_QUEUE] Attempting to play audio:', {
-            segment: startSegmentIndex + 1,
-            duration: audioToPlay.duration,
-            readyState: audioToPlay.readyState
-          });
-
-          // Ensure audio is ready before playing
-          if (audioToPlay.readyState < 2) {
-            await new Promise((resolve, reject) => {
-              const canPlay = () => {
-                audioToPlay.removeEventListener('canplay', canPlay);
-                resolve(true);
-              };
-              const error = (e: ErrorEvent) => {
-                audioToPlay.removeEventListener('error', error);
-                reject(e);
-              };
-              audioToPlay.addEventListener('canplay', canPlay);
-              audioToPlay.addEventListener('error', error);
-            });
-          }
-
-          // Play the audio
-          try {
-            await audioToPlay.play();
-            console.log('[AUDIO_QUEUE] Successfully started playback:', {
-              segment: startSegmentIndex + 1,
-              currentTime: audioToPlay.currentTime,
-              duration: audioToPlay.duration
-            });
-          } catch (error) {
-            console.error('[AUDIO_QUEUE] Play error:', error);
-            set({ isPlaying: false, currentAudio: null });
-            throw error;
-          }
+            queue: state.queue.map(item => 
+              item.id === targetId
+                ? {
+                    ...item,
+                    currentSegment: targetSegmentIndex!,
+                    status: 'playing',
+                    segments: item.segments.map((seg, idx) => ({
+                      ...seg,
+                      status: idx === targetSegmentIndex ? 'playing' : seg.status
+                    }))
+                  }
+                : item
+            )
+          }));
         } catch (error) {
-          console.error('[AUDIO_QUEUE] Play error:', error);
+          console.error('[AudioQueue] Error in play function:', error);
+          set(state => ({
+            ...state,
+            isPlaying: false,
+            queue: state.queue.map(item =>
+              item.id === targetId
+                ? {
+                    ...item,
+                    status: 'error',
+                    error: error instanceof Error ? error.message : 'Failed to play audio'
+                  }
+                : item
+            )
+          }));
           throw error;
         }
       },
 
       pause: () => {
-        const state = get()
-        if (state.currentAudio) {
-          state.currentAudio.pause()
-          set({ isPlaying: false })
-        }
+        console.log("[AudioQueue] Pausing audio...");
+        toneManager.pause();
+        set(state => ({ ...state, isPlaying: false }));
       },
 
       setStatus: (id: string, status: QueueItemStatus, error?: string) => {
-        set(state => ({
+        set((state: AudioQueueStore) => ({
+          ...state,
           queue: state.queue.map(item =>
             item.id === id
               ? {
@@ -720,8 +625,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
         if (conversionAbortController) {
           conversionAbortController.abort()
           
-          // Instead of removing the item, keep converted segments
-          set(state => {
+          set((state: AudioQueueStore) => {
             const updatedQueue = state.queue.map(item => {
               if (item.status === 'pending' || item.status === 'converting') {
                 return {
@@ -737,6 +641,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
             })
             
             return {
+              ...state,
               isConverting: false,
               conversionAbortController: null,
               queue: updatedQueue
@@ -746,36 +651,27 @@ export const useAudioQueue = create<AudioQueueStore>()(
       },
 
       setVolume: (volume: number) => {
-        set({ volume })
-        // Update volume of current audio element if it exists
-        const currentAudio = get().currentAudio
-        if (currentAudio) {
-          currentAudio.volume = volume
-        }
+        toneManager.setVolume(volume);
+        set(state => ({ ...state, volume }));
       },
 
       toggleMute: () => {
-        set(state => ({ muted: !state.muted }))
-        // Update volume of current audio element if it exists
-        const currentAudio = get().currentAudio
-        if (currentAudio) {
-          currentAudio.muted = get().muted
-        }
+        const newMuted = !get().muted;
+        toneManager.setMute(newMuted);
+        set(state => ({ ...state, muted: newMuted }));
       },
 
       rehydrateAudio: async () => {
         const state = get()
         
-        // Rehydrate audio elements from IndexedDB
         for (const item of state.queue) {
           for (const segment of item.segments) {
             if (segment.status === 'ready' || segment.status === 'pending') {
               try {
-                const audioData = await getAudioData(segment.id)
+                const audioData = await fetchAudioSegment(segment.id)
                 if (audioData) {
-                  // Create blob from ArrayBuffer
                   const blob = new Blob([audioData], { type: 'audio/wav' })
-                  segment.audio = new Audio(URL.createObjectURL(blob))
+                  // segment.audio = new Audio(URL.createObjectURL(blob))
                   segment.status = 'ready'
                 }
               } catch (error) {
@@ -787,8 +683,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
           }
         }
         
-        // Update the store
-        set({ queue: [...state.queue] })
+        set({ ...state, queue: [...state.queue] })
       },
 
       resumeConversion: async (id: string, voice: VoiceId) => {
@@ -798,17 +693,17 @@ export const useAudioQueue = create<AudioQueueStore>()(
 
         const abortController = new AbortController()
         
+        const currentState = get();
         set({ 
+          ...currentState,
           isConverting: true,
           conversionAbortController: abortController
         })
 
         try {
-          // Convert remaining segments
           for (let i = 0; i < item.segments.length; i++) {
             const segment = item.segments[i]
             
-            // Skip already converted segments
             if (segment.status === 'ready') continue
 
             try {
@@ -823,91 +718,32 @@ export const useAudioQueue = create<AudioQueueStore>()(
                 throw new Error('Failed to convert text to speech')
               }
 
-              const audioBlob = await response.blob()
-              // Convert blob to ArrayBuffer for storage
-              const audioData = await audioBlob.arrayBuffer()
+              const arrayBuffer = await response.arrayBuffer()
+              const audioBlob = new Blob([arrayBuffer], { type: 'audio/mpeg' })
+              const audioUrl = URL.createObjectURL(audioBlob)
               
-              console.log('Segment converted:', {
-                audioDataLength: audioData.byteLength
-              })
-              
-              // Store audio data in IndexedDB
-              await storeAudioData(segment.id, audioData)
-              
-              // Create blob from ArrayBuffer
-              try {
-                const blob = new Blob([audioData], { type: 'audio/wav' })
-                const url = URL.createObjectURL(blob)
-                
-                // Set up audio element
-                const audio = createAudioElement()
-                audio.src = url
-                await audio.load() // Explicitly load the audio
-                
-                // Update segment with URL and audio
-                set(state => {
-                  const updatedItem = state.queue.find(item => item.id === id)
-                  if (!updatedItem) return state
-
-                  // Update the specific segment
-                  const segment = updatedItem.segments[i]
-                  segment.audioUrl = url
-                  segment.audio = audio
-                  segment.status = 'ready'
-
-                  // Count ready segments
-                  const readySegments = updatedItem.segments.reduce((count, s) => {
-                    return count + (s.status === 'ready' ? 1 : 0)
-                  }, 0)
-
-                  console.log('[AUDIO_QUEUE] Segment conversion status:', {
-                    segmentId: segment.id,
-                    url,
-                    currentSegment: i + 1,
-                    totalSegments: item.segments.length,
-                    readySegments,
-                    allSegmentsReady: readySegments === item.segments.length
-                  })
-
-                  // Update queue item status if all segments are ready
-                  if (readySegments === item.segments.length) {
-                    updatedItem.status = 'ready'
-                  }
-
-                  return {
-                    queue: state.queue.map(item =>
-                      item.id === id ? updatedItem : item
-                    )
-                  }
-                })
-                
-              } catch (error) {
-                console.error(`Error loading audio for segment ${i + 1}:`, error)
-                set(state => ({
-                  queue: state.queue.map(item =>
-                    item.id === id
-                      ? {
-                          ...item,
-                          segments: item.segments.map((segment, index) =>
-                            index === i
-                              ? { ...segment, status: 'error', error: error instanceof Error ? error.message : 'Unknown error' }
-                              : segment
-                          ),
-                          status: 'error',
-                          error: `Failed to load audio for segment ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`
-                        }
-                      : item
-                  )
-                }))
-                throw error
-              }
-
+              set((state: AudioQueueStore) => ({
+                ...state,
+                queue: state.queue.map(item =>
+                  item.id === id
+                    ? {
+                        ...item,
+                        segments: item.segments.map((seg, idx) => ({
+                          ...seg,
+                          audioUrl,
+                          status: 'ready' as AudioSegmentStatus,
+                          error: undefined
+                        }))
+                      }
+                    : item
+                )
+              }))
             } catch (error) {
               if ((error as { name: string }).name === 'AbortError') throw error
               
               console.error(`Error converting segment ${i}:`, error)
-              // Mark the failed segment but continue with others
-              set(state => ({
+              set((state: AudioQueueStore) => ({
+                ...state,
                 queue: state.queue.map(qItem =>
                   qItem.id === id
                     ? {
@@ -929,8 +765,8 @@ export const useAudioQueue = create<AudioQueueStore>()(
           }
         } catch (error) {
           if ((error as { name: string }).name === 'AbortError') {
-            // Handle cancellation
-            set(state => ({
+            set((state: AudioQueueStore) => ({
+              ...state,
               isConverting: false,
               conversionAbortController: null,
               queue: state.queue.map(qItem =>
@@ -949,8 +785,8 @@ export const useAudioQueue = create<AudioQueueStore>()(
             return
           }
 
-          // Handle other errors
-          set(state => ({
+          set((state: AudioQueueStore) => ({
+            ...state,
             isConverting: false,
             conversionAbortController: null,
             queue: state.queue.map(qItem =>
@@ -962,8 +798,8 @@ export const useAudioQueue = create<AudioQueueStore>()(
           throw error
         }
 
-        // All remaining segments converted successfully
-        set(state => ({
+        set((state: AudioQueueStore) => ({
+          ...state,
           isConverting: false,
           conversionAbortController: null,
           queue: state.queue.map(qItem =>
@@ -990,17 +826,30 @@ export const useAudioQueue = create<AudioQueueStore>()(
         muted: state.muted
       }),
       onRehydrateStorage: () => (state) => {
+        if (!state) {
+          return {
+            queue: [],
+            currentIndex: null,
+            isPlaying: false,
+            currentAudio: null,
+            isConverting: false,
+            conversionAbortController: null,
+            volume: 1,
+            muted: false,
+            currentTime: 0,
+            duration: 0,
+            requiresUserInteraction: false
+          };
+        }
         console.log('Rehydrating audio queue store:', state)
         if (state) {
-          // Rehydrate audio elements for all segments
           state.queue.forEach(item => {
             item.segments.forEach(async (segment) => {
               try {
-                const audioData = await getAudioData(segment.id)
+                const audioData = await fetchAudioSegment(segment.id)
                 if (audioData) {
-                  // Create blob from ArrayBuffer
                   const blob = new Blob([audioData], { type: 'audio/wav' })
-                  segment.audio = new Audio(URL.createObjectURL(blob))
+                  // segment.audio = new Audio(URL.createObjectURL(blob))
                   segment.status = 'ready'
                 }
               } catch (error) {
@@ -1010,6 +859,21 @@ export const useAudioQueue = create<AudioQueueStore>()(
               }
             })
           })
+        }
+        
+        return {
+          ...state,
+          queue: state.queue,
+          currentIndex: state.currentIndex,
+          isPlaying: false,
+          currentAudio: null,
+          isConverting: false,
+          conversionAbortController: null,
+          volume: state.volume,
+          muted: state.muted,
+          currentTime: 0,
+          duration: 0,
+          requiresUserInteraction: false
         }
       }
     }

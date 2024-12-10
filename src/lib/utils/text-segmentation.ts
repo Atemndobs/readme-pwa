@@ -5,6 +5,7 @@ export const MAX_SEGMENT_LENGTH = 500; // Maximum characters per segment
 const BLOCK_ELEMENTS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'div'];
 
 export interface TextSegment {
+  id: string;
   text: string;
   type: 'heading' | 'paragraph' | 'list' | 'quote' | 'text';
   level?: number;
@@ -69,6 +70,10 @@ function getHeadingLevel(element: cheerio.Element): number | undefined {
   return undefined;
 }
 
+function generateId() {
+  return Math.random().toString(36).substring(7);
+}
+
 export function segmentText(html: string): TextSegment[] {
   // If the input is plain text, wrap it in a paragraph tag
   const isHTML = /<[a-z][\s\S]*>/i.test(html);
@@ -94,6 +99,7 @@ export function segmentText(html: string): TextSegment[] {
       if (!seenTexts.has(segmentText)) {
         seenTexts.add(segmentText);
         segments.push({
+          id: generateId(),
           text: segmentText,
           type,
           level,
@@ -110,6 +116,7 @@ export function segmentText(html: string): TextSegment[] {
       if (!seenTexts.has(segmentText)) {
         seenTexts.add(segmentText);
         segments.push({
+          id: generateId(),
           text: segmentText,
           type: 'text',
           pauseDuration: PAUSE_DURATIONS.text,

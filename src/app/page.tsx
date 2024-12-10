@@ -40,7 +40,7 @@ export default function Home() {
     setUrlInput,
     setActiveTab 
   } = useSettings()
-  const { add, queue, isPlaying } = useAudioQueue()
+  const { add, queue, isPlaying, clear } = useAudioQueue()
   const tabsRef = useRef<HTMLDivElement>(null)
   const contentEditableRef = useRef<HTMLDivElement>(null)
 
@@ -55,6 +55,24 @@ export default function Home() {
     }
     return () => clearInterval(interval)
   }, [isConverting])
+
+  useEffect(() => {
+    if (queue.length === 0) {
+      // Clear text input when queue is empty
+      setTextInput('')
+      setUrlInput('')
+    }
+  }, [queue, setTextInput, setUrlInput])
+
+  const handleClearText = (value: string) => {
+    setTextInput('')
+    setUrlInput('')
+    clear() // This will clear the audio queue and stop playback
+  }
+
+  const handleClosePlayer = () => {
+    clear() // This will also trigger the useEffect above to clear the text
+  }
 
   // Check if any item in the queue is currently loading or playing
   const isProcessing = queue.some(item => 
@@ -142,9 +160,11 @@ export default function Home() {
     <main className="container mx-auto p-4 space-y-4 max-w-2xl pb-40">
       <MobileNav />
       
-      <Tabs 
-        value={activeTab as string} 
-        onValueChange={(value) => setActiveTab(value as "url" | "text")} 
+      <Tabs
+        defaultValue={activeTab}
+        value={activeTab}
+        onValueChange={setActiveTab}
+        ref={tabsRef}
         className="w-full"
       >
         {(!hasAudioContent && !isProcessing) && (
@@ -171,8 +191,8 @@ export default function Home() {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2 hover:bg-transparent"
-                    onClick={() => setUrlInput('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2"
+                    onClick={() => handleClearText('text')}
                   >
                     <XIcon className="h-4 w-4" />
                   </Button>
@@ -434,7 +454,7 @@ export default function Home() {
         </TabsContent>
       </Tabs>
 
-      <MiniPlayer />
+      <MiniPlayer onClose={handleClosePlayer} />
     </main>
   )
 }

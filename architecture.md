@@ -76,9 +76,9 @@ This document outlines the architectural decisions and design patterns implement
    - Web Page Parsing
 
 2. **Audio Management**
-   - Mini Player with playback controls
-   - Audio Queue Management
-   - Voice Customization
+   - Integrated Tone.js for improved audio playback and management
+   - Implemented autoplay functionality to automatically play the next audio in the queue
+   - Ensured only one audio plays at a time, with proper cleanup when the player is closed
 
 3. **User Interface**
    - Dark Mode Support
@@ -100,6 +100,7 @@ This document outlines the architectural decisions and design patterns implement
 - **ShadCN UI**: Component library built on Radix UI primitives
 - **Zustand**: State management with persistence
 - **Readability.js**: Content parsing
+- **Tone.js**: Used for audio management and playback
 
 ### Storage and State Management
 - **IndexedDB**: Client-side audio data storage
@@ -181,6 +182,107 @@ The application implements a robust audio system with the following components:
    - Queue management
    - Platform-specific optimizations
    - Background playback support
+
+## Audio System Architecture
+
+### Core Components
+
+#### 1. Audio Management Layer
+- **File**: `src/lib/utils/tone-manager.ts`
+- **Purpose**: Core audio playback engine using Tone.js
+- **Responsibilities**:
+  - Manages low-level audio playback
+  - Handles audio buffer loading
+  - Controls audio states (play, pause, stop)
+  - Manages audio context initialization
+  - Provides audio timing and seeking capabilities
+
+#### 2. State Management Layer
+- **File**: `src/lib/store/audio-queue.ts`
+- **Purpose**: Manages audio queue and playback state
+- **Responsibilities**:
+  - Maintains queue of audio segments
+  - Handles play/pause state
+  - Manages current track position
+  - Coordinates segment transitions
+  - Provides audio control interface for UI components
+
+#### 3. User Interface Components
+
+##### MiniPlayer Component
+- **File**: `src/components/audio-player/mini-player.tsx`
+- **Purpose**: Main audio player interface
+- **Responsibilities**:
+  - Displays playback controls
+  - Shows current track information
+  - Handles user interactions
+  - Manages play/pause toggle
+  - Displays loading and conversion states
+
+##### ProgressBar Component
+- **File**: `src/components/audio-player/progress-bar.tsx`
+- **Purpose**: Audio progress visualization and control
+- **Responsibilities**:
+  - Shows current playback position
+  - Enables seeking through audio segments
+  - Displays segment markers
+  - Provides visual feedback for loading states
+
+### Component Interactions
+
+```mermaid
+graph TD
+    A[MiniPlayer] --> B[Audio Queue Store]
+    C[ProgressBar] --> B
+    B --> D[Tone Manager]
+    D --> E[Web Audio API]
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style B fill:#bbf,stroke:#333,stroke-width:2px
+    style C fill:#f9f,stroke:#333,stroke-width:2px
+    style D fill:#dfd,stroke:#333,stroke-width:2px
+```
+
+### Data Flow
+1. **User Interaction**:
+   - User interacts with MiniPlayer or ProgressBar
+   - Components dispatch actions to Audio Queue Store
+
+2. **State Management**:
+   - Audio Queue Store updates state
+   - Notifies components of state changes
+   - Coordinates with Tone Manager for audio operations
+
+3. **Audio Processing**:
+   - Tone Manager handles low-level audio operations
+   - Manages Web Audio API interactions
+   - Reports back playback status and timing
+
+### Key Features
+1. **Segment Management**:
+   - Audio content is divided into segments
+   - Each segment can be individually loaded and played
+   - Seamless transitions between segments
+
+2. **State Synchronization**:
+   - UI components react to audio state changes
+   - Progress updates are propagated in real-time
+   - Error states are handled and displayed
+
+3. **Resource Management**:
+   - Audio buffers are loaded efficiently
+   - Resources are cleaned up when not needed
+   - Memory usage is optimized
+
+### Error Handling
+- Audio loading failures are caught and reported
+- Playback errors are handled gracefully
+- Network issues are managed with retry logic
+
+### Performance Considerations
+- Audio segments are loaded progressively
+- State updates are optimized for smooth playback
+- UI updates are throttled to prevent performance issues
 
 ## Target Architecture Overview
 ReadMe-TTS is designed as a Progressive Web App (PWA) for converting web content and text into high-quality speech output. The system aims to provide a seamless, customizable audio experience through three core functionalities:
@@ -366,6 +468,21 @@ interface QueueOptimization {
    - Add seeking capability
    - Implement speed control
    - Add playlist management
+
+## Recent Architectural Decisions
+
+1. **IndexedDB Management**
+   - Integrated Dexie.js to simplify the handling of IndexedDB operations. This change aims to improve code readability and maintainability while reducing errors during database transactions.
+
+2. **Audio Management**
+   - Adopted Tone.js for enhanced audio playback management. This library provides robust features to improve playback stability and support various audio formats.
+
+3. **Error Handling and Playback Logic**
+   - Refactored the error handling and playback logic in the audio queue to ensure robust error management and efficient segment loading. This includes preloading segments and implementing retries or fallbacks.
+
+4. **Monitoring and Testing**
+   - Enhanced logging and monitoring with Sentry to capture and analyze errors during playback. This will aid in identifying specific issues and guiding further improvements.
+   - Conducted thorough testing across different devices and browsers to ensure compatibility and stability, particularly focusing on iOS and Safari.
 
 ## Recent Changes (v0.1.1)
 
