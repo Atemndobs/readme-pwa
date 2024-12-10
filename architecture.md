@@ -76,9 +76,9 @@ This document outlines the architectural decisions and design patterns implement
    - Web Page Parsing
 
 2. **Audio Management**
-   - Mini Player with playback controls
-   - Audio Queue Management
-   - Voice Customization
+   - Integrated Tone.js for improved audio playback and management
+   - Implemented autoplay functionality to automatically play the next audio in the queue
+   - Ensured only one audio plays at a time, with proper cleanup when the player is closed
 
 3. **User Interface**
    - Dark Mode Support
@@ -100,6 +100,7 @@ This document outlines the architectural decisions and design patterns implement
 - **ShadCN UI**: Component library built on Radix UI primitives
 - **Zustand**: State management with persistence
 - **Readability.js**: Content parsing
+- **Tone.js**: Used for audio management and playback
 
 ### Storage and State Management
 - **IndexedDB**: Client-side audio data storage
