@@ -7,6 +7,8 @@ class ToneAudioManager {
   private initialized = false;
   private onEndCallback: (() => void) | null = null;
   private static instance: ToneAudioManager;
+  private lastPosition: number = 0; // Store the playback position
+
   
   constructor() {
     // Ensure singleton pattern
@@ -73,29 +75,46 @@ class ToneAudioManager {
       throw error;
     }
   }
-
+  
   async play() {
     if (!this.player) {
-      throw new Error('No audio loaded');
+      throw new Error("No audio loaded");
     }
+  
     const state = this.player.state as "started" | "stopped" | "paused";
+  
     try {
       await this.initializeContext();
-      if (state === "stopped" || state === "paused") {
-        await this.player.start();
+  
+      if (state === "stopped") {
+        // Start playback from the beginning
+        this.lastPosition = 0;
+        this.player.seek(0); // Ensure playback starts from the beginning
+        this.player.start();
+      } else if (state === "paused") {
+        // Resume playback from the last position
+        this.player.seek(this.lastPosition); // Set the playback position
+        this.player.start();
+      }else{
+        this.pause()
       }
-      
     } catch (error) {
-      console.error('[ToneManager] Error playing audio:', error);
+      console.error("[ToneManager] Error playing audio:", error);
       throw error;
     }
   }
-
+  
   pause() {
-    if (this.player && this.player.state === ('started')) {
-      this.player.stop();
+    console.log("[ToneManager] Attempting to pause. Current state:", this.player?.state);
+    if (this.player && this.player.state === "started") {
+        this.lastPosition = this.player.toSeconds(this.player.blockTime);
+        this.player.stop(); // Stop the player (acts as "pause" here)
+        console.log("Paused audio at position:", this.lastPosition);
+    } else {
+        console.log("Player is not in 'started' state, cannot pause.");
     }
-  }
+}
+  
 
   stopAndCleanup() {
     if (this.player) {
