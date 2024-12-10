@@ -1,8 +1,9 @@
 import * as Tone from 'tone';
 
+
 class ToneAudioManager {
   private player: Tone.Player | null = null;
-  private volume: Tone.Volume;
+  private volume: Tone.Volume = new Tone.Volume(0).toDestination();
   private initialized = false;
   private onEndCallback: (() => void) | null = null;
   private static instance: ToneAudioManager;
@@ -77,12 +78,13 @@ class ToneAudioManager {
     if (!this.player) {
       throw new Error('No audio loaded');
     }
-    
+    const state = this.player.state as "started" | "stopped" | "paused";
     try {
       await this.initializeContext();
-      if (this.player.state !== 'started') {
+      if (state === "stopped" || state === "paused") {
         await this.player.start();
       }
+      
     } catch (error) {
       console.error('[ToneManager] Error playing audio:', error);
       throw error;
@@ -90,7 +92,7 @@ class ToneAudioManager {
   }
 
   pause() {
-    if (this.player && this.player.state === 'started') {
+    if (this.player && this.player.state === ('started')) {
       this.player.stop();
     }
   }
@@ -114,10 +116,14 @@ class ToneAudioManager {
   setMute(muted: boolean) {
     this.volume.mute = muted;
   }
-
   getCurrentTime(): number {
-    return this.player ? this.player.currentTime : 0;
+    if (this.player && this.player.state === "started") {
+      return this.player.toSeconds(this.player.blockTime);
+    }
+    return 0; // Return 0 if stopped or player is null
   }
+  
+  
 
   getDuration(): number {
     return this.player?.buffer?.duration ?? 0;
