@@ -6,6 +6,7 @@ import { segmentText, TextSegment, PAUSE_DURATIONS } from '../utils/text-segment
 import { storeAudioData, getAudioData, removeAudioData, clearAudioData } from '../utils/indexed-db'
 import { isIOSSafari } from '@/lib/utils/device';
 import { handleIOSAudioInit, getUserInteraction } from '@/lib/utils/ios-audio';
+import * as Sentry from '@sentry/nextjs';
 
 type AudioSegmentStatus = 'pending' | 'loading' | 'ready' | 'playing' | 'paused' | 'error' | 'cancelled'
 type QueueItemStatus = 'pending' | 'loading' | 'ready' | 'playing' | 'paused' | 'error' | 'partial' | 'converting'
@@ -170,7 +171,13 @@ export const useAudioQueue = create<AudioQueueStore>()(
               convertTextToSpeech(segment.text, voice, abortController.signal)
                 .then(async (audioData) => {
                   try {
-                    const audioUrl = await storeAudioData(audioData)
+                    // Convert the audio blob to ArrayBuffer
+                    const audioBlob = audioData[0]?.audio
+                    if (!audioBlob) {
+                      throw new Error('No audio data received from TTS')
+                    }
+                    const arrayBuffer = await audioBlob.arrayBuffer()
+                    const audioUrl = await storeAudioData(arrayBuffer)
                     
                     set(state => ({
                       queue: state.queue.map(item =>
@@ -449,6 +456,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
 
       play: async (id?: string, segmentIndex?: number) => {
         const state = get();
+        const targetId = id || 'unknown'; // Initialize targetId with id or a default value
         
         try {
           console.log('[AUDIO_QUEUE] Play called:', {
@@ -476,12 +484,6 @@ export const useAudioQueue = create<AudioQueueStore>()(
             state.currentAudio.removeEventListener('ended', state.currentAudio.onended as any);
             state.currentAudio.removeEventListener('error', state.currentAudio.onerror as any);
             set({ currentAudio: null, currentTime: 0, duration: 0 });
-          }
-
-          const targetId = id || (state.currentIndex !== null ? state.queue[state.currentIndex].id : state.queue[0]?.id);
-          if (!targetId) {
-            console.log('[AUDIO_QUEUE] No target ID found');
-            return;
           }
 
           const queueItem = state.queue.find(item => item.id === targetId);
@@ -594,7 +596,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
                 error: error.message,
                 status: error.target instanceof HTMLAudioElement ? error.target.error?.code : 'unknown'
               };
-              console.error('[AUDIO_QUEUE] Audio error:', errorDetails);
+              // console.error('[AUDIO_QUEUE] Audio error:', errorDetails);
               
               audio.removeEventListener('timeupdate', handleTimeUpdate);
               audio.removeEventListener('ended', handleEnded);
@@ -624,11 +626,19 @@ export const useAudioQueue = create<AudioQueueStore>()(
 
                   // Try to find the next playable segment
                   const findNextPlayableSegment = async (startIndex: number): Promise<number | null> => {
-                    if (!currentItem) return null;
-                    
+                    if (!currentItem) {
+                      console.error('Cannot find next playable segment: currentItem is undefined');
+                      return null;
+                    }
+
                     for (let i = startIndex; i < currentItem.totalSegments; i++) {
                       const segment = currentItem.segments[i];
                       if (!segment?.audioUrl) continue;
+                      
+                      // For blob URLs, we don't need to check if they exist
+                      if (segment.audioUrl.startsWith('blob:')) {
+                        return i;
+                      }
                       
                       try {
                         const response = await fetch(segment.audioUrl, { method: 'HEAD' });
@@ -654,12 +664,20 @@ export const useAudioQueue = create<AudioQueueStore>()(
                   const maxAttempts = 5;
                   const waitForSegment = async () => {
                     if (attempts >= maxAttempts) {
-                      console.error('[AUDIO_QUEUE] No playable segments found after max attempts');
+                      const error = new Error('[AUDIO_QUEUE] No playable segments found after max attempts');
+                      Sentry.captureException(error, {
+                        extra: {
+                          targetId,
+                          nextSegmentIndex,
+                          attempts
+                        }
+                      });
+                      console.warn(error);
                       get().pause();
                       set(state => ({
                         queue: state.queue.map(item =>
                           item.id === targetId
-                            ? { ...item, error: 'Failed to play audio after multiple attempts' }
+                            ? { ...item, error: 'No playable segments found after max attempts' }
                             : item
                         )
                       }));
@@ -690,9 +708,16 @@ export const useAudioQueue = create<AudioQueueStore>()(
                   
                   await waitForSegment();
                 } catch (e) {
-                  console.error('[AUDIO_QUEUE] Error handling segment error:', e);
+                  const error = e instanceof Error ? e : new Error('[AUDIO_QUEUE] Error handling segment error');
+                  Sentry.captureException(error, {
+                    extra: {
+                      targetId,
+                      nextSegmentIndex,
+                      originalError: e
+                    }
+                  });
+                  console.warn('[AUDIO_QUEUE] Error handling segment error:', e);
                   get().pause();
-                  
                   set(state => ({
                     queue: state.queue.map(item =>
                       item.id === targetId
@@ -707,7 +732,7 @@ export const useAudioQueue = create<AudioQueueStore>()(
             audio.addEventListener('timeupdate', handleTimeUpdate);
             audio.addEventListener('ended', handleEnded);
             audio.addEventListener('error', handleError);
-            audio.src = segment.audioUrl;
+            audio.src = segment.audioUrl !== null ? segment.audioUrl : "fallback-url";
             segment.audio = audio;
           }
 
@@ -745,12 +770,28 @@ export const useAudioQueue = create<AudioQueueStore>()(
               duration: audioToPlay.duration
             });
           } catch (error) {
-            console.error('[AUDIO_QUEUE] Play error:', error);
+            const sentryError = error instanceof Error ? error : new Error('[AUDIO_QUEUE] Play error');
+            Sentry.captureException(sentryError, {
+              extra: {
+                targetId,
+                nextSegmentIndex,
+                originalError: error
+              }
+            });
+            console.warn('[AUDIO_QUEUE] Play error:', error);
             set({ isPlaying: false, currentAudio: null });
             await get().play(targetId, nextSegmentIndex + 1);
           }
         } catch (error) {
-          console.error('[AUDIO_QUEUE] Play error:', error);
+          const sentryError = error instanceof Error ? error : new Error('[AUDIO_QUEUE] Play error');
+          Sentry.captureException(sentryError, {
+            extra: {
+              targetId,
+              segmentIndex,
+              originalError: error
+            }
+          });
+          console.warn('[AUDIO_QUEUE] Play error:', error);
           throw error;
         }
       },
@@ -877,46 +918,27 @@ export const useAudioQueue = create<AudioQueueStore>()(
                 throw new Error('Failed to convert text to speech')
               }
 
-              const audioBlob = await response.blob()
-              const audioData = await audioBlob.arrayBuffer()
+              const arrayBuffer = await response.arrayBuffer()
+              const audioBlob = new Blob([arrayBuffer], { type: 'audio/mpeg' })
+              const audioUrl = URL.createObjectURL(audioBlob)
               
-              console.log('Segment converted:', {
-                audioDataLength: audioData.byteLength
-              })
-              
-              await storeAudioData(segment.id, audioData)
-              
-              const blob = new Blob([audioData], { type: 'audio/wav' })
-              const url = URL.createObjectURL(blob)
-              
-              const audio = createAudioElement()
-              audio.src = url
-              await audio.load() // Explicitly load the audio
-                
-              segment.audioUrl = url
-              segment.audio = audio
-              segment.status = 'ready'
-
-              const readySegments = item.segments.reduce((count, s) => {
-                return count + (s.status === 'ready' ? 1 : 0)
-              }, 0)
-
-              console.log('[AUDIO_QUEUE] Segment conversion status:', {
-                segmentId: segment.id,
-                url,
-                currentSegment: i + 1,
-                totalSegments: item.segments.length,
-                readySegments,
-                allSegmentsReady: readySegments === item.segments.length
-              })
-
-              if (readySegments === item.segments.length) {
-                item.status = 'ready'
-              }
-
               set(state => ({
                 queue: state.queue.map(item =>
-                  item.id === id ? { ...item } : item
+                  item.id === id
+                    ? {
+                        ...item,
+                        segments: item.segments.map((seg, idx) =>
+                          idx === i
+                            ? {
+                                ...seg,
+                                audioUrl,
+                                status: 'ready' as AudioSegmentStatus,
+                                error: undefined
+                              }
+                            : seg
+                        )
+                      }
+                    : item
                 )
               }))
             } catch (error) {

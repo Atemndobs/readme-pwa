@@ -150,7 +150,7 @@ async function migrateToIndexedDB(): Promise<void> {
         }
         
         // Store in IndexedDB
-        await storeAudioData(key, bytes.buffer)
+        await storeAudioData(bytes.buffer)
         // Remove from localStorage
         localStorage.removeItem(key)
       }
@@ -201,7 +201,7 @@ export async function migrateAudioDataToIndexedDB() {
         }
         
         // Store in IndexedDB using our utility function
-        await storeAudioData(key, bytes.buffer)
+        await storeAudioData(bytes.buffer)
         // Remove from localStorage
         localStorage.removeItem(key)
       }

@@ -7,6 +7,7 @@ const nextConfig = {
     serverActions: {
       allowedOrigins: ['localhost:3000', 'localhost:3007'],
     },
+    instrumentationHook: true, // Enable instrumentation hook
   },
   headers: async () => {
     return [
@@ -25,13 +26,16 @@ const nextConfig = {
   images: {
     domains: ['localhost'],
   },
-  sentry: {
-    hideSourceMaps: true,
-  },
 }
 
 const sentryWebpackPluginOptions = {
-  silent: true,
-}
+  org: "bertrand-atemkeng",
+  project: "javascript-nextjs",
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: false,
+  hideSourceMaps: true,
+  widenClientFileUpload: true,
+  tunnelRoute: "/monitoring-tunnel",
+};
 
 module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions);

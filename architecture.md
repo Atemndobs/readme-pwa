@@ -367,6 +367,21 @@ interface QueueOptimization {
    - Implement speed control
    - Add playlist management
 
+## Recent Architectural Decisions
+
+1. **IndexedDB Management**
+   - Integrated Dexie.js to simplify the handling of IndexedDB operations. This change aims to improve code readability and maintainability while reducing errors during database transactions.
+
+2. **Audio Management**
+   - Adopted Tone.js for enhanced audio playback management. This library provides robust features to improve playback stability and support various audio formats.
+
+3. **Error Handling and Playback Logic**
+   - Refactored the error handling and playback logic in the audio queue to ensure robust error management and efficient segment loading. This includes preloading segments and implementing retries or fallbacks.
+
+4. **Monitoring and Testing**
+   - Enhanced logging and monitoring with Sentry to capture and analyze errors during playback. This will aid in identifying specific issues and guiding further improvements.
+   - Conducted thorough testing across different devices and browsers to ensure compatibility and stability, particularly focusing on iOS and Safari.
+
 ## Recent Changes (v0.1.1)
 
 ### Improvements

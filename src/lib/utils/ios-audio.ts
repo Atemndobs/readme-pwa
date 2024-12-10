@@ -53,11 +53,19 @@ export const initializeIOSAudio = async () => {
         
         // Double-check the context state after a small delay
         await new Promise(resolve => setTimeout(resolve, 100));
-        if (audioContext.state === 'running') {
+        if (audioContext.state !== 'suspended') {
           console.log('[iOS Audio] AudioContext resumed successfully');
           setUserInteraction(true);
           unlockAttempts = 0;
           return true;
+        } else if (audioContext.state === 'suspended') {
+          console.warn('[iOS Audio] AudioContext is suspended.');
+          // Handle suspended state if necessary
+        } else if (audioContext.state === 'closed') {
+          console.log('[iOS Audio] AudioContext is closed.');
+          return false;
+        } else {
+          console.error(`Unexpected audio context state: ${audioContext.state}`);
         }
         throw new Error('AudioContext failed to resume');
       }
@@ -106,6 +114,12 @@ export const handleIOSAudioInit = async () => {
       console.error('[iOS Audio] Failed to resume AudioContext:', e);
       return false;
     }
+  } else if (audioContext?.state === 'closed') {
+    console.log('[iOS Audio] AudioContext is closed.');
+    return false;
+  } else if (audioContext?.state !== 'running') {
+    console.error(`Unexpected audio context state: ${audioContext?.state}`);
+    return false;
   }
   
   return true;
@@ -113,7 +127,7 @@ export const handleIOSAudioInit = async () => {
 
 // Function to check if audio needs user interaction
 export const needsUserInteraction = () => {
-  return !getUserInteraction() || audioContext?.state === 'suspended';
+  return !getUserInteraction() || audioContext?.state === 'suspended' || audioContext?.state === 'closed';
 };
 
 // Clean up function for when the app is unmounted or user leaves

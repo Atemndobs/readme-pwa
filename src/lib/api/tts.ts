@@ -1,6 +1,7 @@
 import { VoiceId } from '../store/settings'
 import { segmentText } from '../utils/text-segmentation'
 import * as Sentry from '@sentry/nextjs';
+import { SpanStatus, SPAN_STATUS_OK, SPAN_STATUS_ERROR } from '@sentry/core';
 
 const TTS_API_URL = '/api/tts'
 const MAX_RETRIES = 3
@@ -89,81 +90,63 @@ export async function convertTextToSpeech(
   const segments = segmentText(text);
   const audioSegments: TTSSegment[] = [];
   
-  // Create a new transaction for this conversion
-  const transaction = Sentry.startTransaction({
-    name: 'convert-text-to-speech',
-    op: 'tts',
-  });
-
-  Sentry.configureScope(scope => {
-    scope.setSpan(transaction);
-  });
-  
-  try {
-    for (const segment of segments) {
+  // Create a span for this conversion
+  return Sentry.startSpan(
+    {
+      name: 'tts.convert',
+      op: 'tts',
+      attributes: {
+        textLength: text.length,
+        segmentsCount: segments.length,
+        voice,
+      },
+      forceTransaction: true, // This ensures it shows up as a transaction in the Sentry UI
+    },
+    async (span) => {
       try {
-        console.log(`[TTS] Converting segment: ${segment.text.substring(0, 50)}...`);
-        
-        const span = transaction.startChild({
-          op: 'convert-segment',
-          description: `Converting segment: ${segment.text.substring(0, 50)}...`,
-        });
-        
-        const response = await fetchWithRetry(
-          TTS_API_URL,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              text: segment.text,
-              voice,
-            }),
-            signal,
+        for (const segment of segments) {
+          try {
+            console.log(`[TTS] Converting segment: ${segment.text.substring(0, 50)}...`);
+            
+            const response = await fetchWithRetry(
+              TTS_API_URL,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  text: segment.text,
+                  voice,
+                }),
+                signal,
+              },
+              MAX_RETRIES
+            );
+            
+            const blob = await response.blob();
+            audioSegments.push({ ...segment, audio: blob });
+          } catch (error) {
+            if (error instanceof TTSError) {
+              throw error;
+            }
+            throw new TTSError(`Failed to convert segment: ${error instanceof Error ? error.message : String(error)}`);
           }
-        );
-
-        const blob = await response.blob();
-        
-        // Verify the blob is an audio file
-        if (!blob.type.startsWith('audio/')) {
-          throw new TTSError('Invalid audio format received', false);
         }
         
-        audioSegments.push({
-          ...segment,
-          audio: blob
-        });
-
-        span.finish();
-        
+        span.setStatus({ code: SPAN_STATUS_OK });
+        return audioSegments;
       } catch (error) {
-        // Capture segment-level errors
-        Sentry.captureException(error, {
-          extra: {
-            segmentText: segment.text.substring(0, 100),
-            voice,
-          },
-        });
+        span.setStatus({ code: SPAN_STATUS_ERROR });
+        // Add error details to the span
+        span.setAttribute('error.message', error instanceof Error ? error.message : String(error));
+        span.setAttribute('error.type', error instanceof TTSError ? 'TTSError' : 'UnknownError');
         throw error;
+      } finally {
+        // span.finish();
       }
     }
-    
-    return audioSegments;
-  } catch (error) {
-    // Capture conversion-level errors
-    Sentry.captureException(error, {
-      extra: {
-        textLength: text.length,
-        voice,
-        segmentsCount: segments.length,
-      },
-    });
-    throw error;
-  } finally {
-    transaction.finish();
-  }
+  );
 }
 
 // Helper function to create an audio element from a blob
