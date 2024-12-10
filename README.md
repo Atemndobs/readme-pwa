@@ -5,29 +5,51 @@ A Progressive Web App that converts text to speech with advanced audio managemen
 ## Features
 
 - Text-to-Speech Conversion
-  - Smart Text Selection
+  - Smart Text Segmentation
   - Bulk Text Processing
-  - Web Page Parsing
-- Audio Features
-  - Mini Player with playback controls
-  - Audio Queue Management
-  - Voice Customization
+  - Web Page Content Extraction
+  - Multiple Voice Options
+
+- Audio Management
+  - Mini Player with Playback Controls
+  - Audio Queue System
+  - Voice Model Selection
+  - Platform-Specific Optimizations (iOS Support)
+
 - User Interface
-  - Dark Mode Support
-  - Floating Window
+  - Dark/Light Mode Support
   - Responsive Design
-- Settings Persistence
-  - User preferences stored in PocketBase
+  - Accessible Components
+  - Progress Indicators
+  - Error Handling
+
+- Data Management
+  - Offline Audio Storage
+  - State Persistence
+  - Queue Management
+  - Settings Retention
 
 ## Tech Stack
 
-- Frontend: Next.js (React)
-- UI Components: ShadCN UI (Radix UI primitives)
-- Styling: Tailwind CSS
-- Database: PocketBase
-- State Management: Zustand
-- Text Processing: Readability.js
-- TTS API: voice.cloud.atemkeng.de
+- **Frontend Framework**
+  - Next.js (React)
+  - TypeScript
+  - ShadCN UI (Radix UI primitives)
+  - Tailwind CSS
+
+- **State Management**
+  - Zustand with Persistence
+  - Audio Queue Management
+  - Settings Store
+
+- **Storage**
+  - IndexedDB for Audio Data
+  - Local Storage for Preferences
+
+- **Core Libraries**
+  - Mozilla Readability
+  - Web Audio API
+  - IndexedDB API
 
 ## Getting Started
 
@@ -43,26 +65,76 @@ A Progressive Web App that converts text to speech with advanced audio managemen
 
 3. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## Development
-
-The project structure follows Next.js 13+ conventions with the App Router:
+## Project Structure
 
 ```
 src/
-├── app/                 # App router pages and layouts
-├── components/          # Reusable UI components
-├── lib/                 # Utility functions and configurations
-└── styles/             # Global styles and Tailwind config
+├── app/              # Next.js App Router and API Routes
+│   ├── api/         # API endpoints including TTS
+│   └── page.tsx     # Main application page
+├── components/       # React Components
+│   ├── ui/          # Base UI components
+│   └── audio-player/ # Audio playback components
+├── lib/             # Core Logic
+│   ├── api/         # API integrations
+│   ├── store/       # Zustand stores
+│   └── utils/       # Utility functions
+└── types/           # TypeScript definitions
+```
+
+## Key Features
+
+### Text Processing
+- Smart text segmentation for optimal TTS processing
+- Web page content extraction
+- Support for various text inputs
+
+### Audio System
+- Efficient audio queue management
+- Platform-specific optimizations
+- Seamless playback experience
+- Progress tracking
+
+### Storage
+- Efficient audio data storage using IndexedDB
+- State persistence with Zustand
+- Offline capability
+
+### User Experience
+- Responsive design for all devices
+- Dark/Light mode support
+- Accessible interface
+- Error handling and recovery
+
+## Development
+
+### Prerequisites
+- Node.js 18+
+- npm or yarn
+
+### Development Commands
+```bash
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Start production server
+npm run start
+
+# Type checking
+npm run typecheck
 ```
 
 ## Contributing
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License - see the LICENSE file for details.

@@ -1,5 +1,8 @@
 # Architecture Decision Document (ADD)
 
+## Version
+Current Version: 0.1.1 (Released: 2024-01-09)
+
 ## Purpose and Scope
 
 ReadMe-TTS is a Progressive Web Application (PWA) designed to transform written content into high-quality, natural-sounding speech. The application serves users who prefer consuming content through audio, whether for accessibility needs, multitasking capabilities, or personal preference.
@@ -66,18 +69,52 @@ ReadMe-TTS is a Progressive Web Application (PWA) designed to transform written 
 ## Overview
 This document outlines the architectural decisions and design patterns implemented in the ReadMe PWA application. The application is built as a Progressive Web App using modern web technologies and follows best practices for performance, accessibility, and user experience.
 
+### Core Features
+1. **Text-to-Speech Conversion**
+   - Smart Text Selection
+   - Bulk Text Processing
+   - Web Page Parsing
+
+2. **Audio Management**
+   - Mini Player with playback controls
+   - Audio Queue Management
+   - Voice Customization
+
+3. **User Interface**
+   - Dark Mode Support
+   - Floating Window
+   - Responsive Design
+
+4. **Data Persistence**
+   - IndexedDB for audio data storage
+   - Local storage for user preferences
+   - State management via Zustand
+
 ## Tech Stack
 
 ### Core Technologies
-- **Next.js 15**: Server-side rendering and routing framework
+- **Next.js**: Server-side rendering and routing framework
 - **TypeScript**: Static typing and enhanced developer experience
 - **React**: UI component library
 - **Tailwind CSS**: Utility-first CSS framework
-- **Shadcn/UI**: Component library built on Radix UI primitives
+- **ShadCN UI**: Component library built on Radix UI primitives
+- **Zustand**: State management with persistence
+- **Readability.js**: Content parsing
+
+### Storage and State Management
+- **IndexedDB**: Client-side audio data storage
+  - Audio blob storage
+  - Efficient data retrieval
+  - Storage optimization
+- **Zustand Store**:
+  - Audio queue management
+  - Playback state control
+  - Settings persistence
+  - Error handling
 
 ### Key Dependencies
 - **@mozilla/readability**: Content parsing and readability enhancement
-- **IndexedDB**: Client-side storage for offline capabilities
+- **IndexedDB**: Client-side storage for audio data
 - **next-themes**: Theme management
 - **Radix UI**: Accessible component primitives
 
@@ -112,10 +149,17 @@ The application implements a robust audio system with the following components:
   - Retry mechanism for failed TTS requests
   - Custom audio queue implementation
 
-#### State Management
-- **Settings Store**: Manages voice selection and input handling
-- **Audio Queue Store**: Controls playback state and queue management
-- **Custom Hooks**: Provides reactive state management
+#### State Management and Storage
+1. **State Management**
+   - Zustand (v5.0.1) for application state
+   - Persistent state with Zustand middleware
+   - Audio queue state management
+   - Settings and preferences state
+
+2. **Storage Implementation**
+   - IndexedDB for audio data storage
+   - Browser's local storage for preferences
+   - Audio blob storage and management
 
 #### UI Components
 - Built on Radix UI primitives for accessibility
@@ -323,12 +367,26 @@ interface QueueOptimization {
    - Implement speed control
    - Add playlist management
 
+## Recent Changes (v0.1.1)
+
+### Improvements
+- Enhanced TypeScript implementation in MobileNav component
+- Streamlined voice selection interface
+- Improved debug logging
+- Codebase cleanup and optimization
+
+### Technical Debt Addressed
+- Fixed TypeScript errors
+- Removed unused components
+- Improved component architecture
+- Enhanced debugging capabilities
+
 ## Implementation Priorities
 
 ### Phase 1: Core Functionality
 1. Mozilla Readability.js integration
 2. External TTS service setup
-3. Basic offline storage with Dexie.js
+3. Basic offline storage with IndexedDB
 
 ### Phase 2: Enhanced Features
 1. Advanced audio management
