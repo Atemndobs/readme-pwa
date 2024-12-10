@@ -1,8 +1,9 @@
 import { getStorageStats, getStorageKeys, clearStorage, getStorageItemSize } from './storage'
 import { useSettings } from '@/lib/store/settings'
 import { useAudioQueue } from '@/lib/store/audio-queue'
-import { getDb, storeAudioData, AUDIO_STORE } from './indexed-db';
-import { Settings } from '@/lib/store/settings';
+import { removeAudioData, clearAudioData } from './indexed-db'
+import { Settings } from '@/lib/store/settings'
+import { Key } from 'lucide-react'
 
 interface StorageItem {
   key: string
@@ -103,7 +104,7 @@ async function cleanupAudioQueue(keepCurrentItem: boolean = true): Promise<void>
     // Remove all segments for this item
     for (const segment of item.segments) {
       if (segment.id) {
-        clearStorage(segment.id)
+        await clearAudioData() // @TODO CHECK THIS
       }
     }
   }
@@ -150,7 +151,7 @@ async function migrateToIndexedDB(): Promise<void> {
         }
         
         // Store in IndexedDB
-        await storeAudioData(bytes.buffer)
+        await removeAudioData(key) // @TODO CHECK THIS
         // Remove from localStorage
         localStorage.removeItem(key)
       }
@@ -201,7 +202,7 @@ export async function migrateAudioDataToIndexedDB() {
         }
         
         // Store in IndexedDB using our utility function
-        await storeAudioData(bytes.buffer)
+        await removeAudioData(key) // @TODO CHECK THIS
         // Remove from localStorage
         localStorage.removeItem(key)
       }
@@ -213,29 +214,8 @@ export async function migrateAudioDataToIndexedDB() {
 
 export async function cleanupStorage(): Promise<void> {
   try {
-    const db = await getDb()
-    const transaction = db.transaction([AUDIO_STORE], 'readwrite')
-    const store = transaction.objectStore(AUDIO_STORE)
-
-    return new Promise((resolve, reject) => {
-      const request = store.getAll()
-
-      request.onerror = () => reject(request.error)
-      request.onsuccess = () => {
-        const items = request.result
-        const now = Date.now()
-        const ONE_DAY = 24 * 60 * 60 * 1000
-
-        items.forEach(item => {
-          if (now - item.timestamp > ONE_DAY) {
-            store.delete(item.id)
-          }
-        })
-
-        transaction.oncomplete = () => resolve()
-        transaction.onerror = () => reject(transaction.error)
-      }
-    })
+    // Remove all audio data from IndexedDB
+    await clearAudioData()
   } catch (error) {
     console.error('Error cleaning up storage:', error)
   }
